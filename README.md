@@ -1,1 +1,1 @@
-# customer-service-agent
+# customer-service-assistant
