@@ -41,9 +41,31 @@ A customer service agent for a hair care products company, deployed entirely on 
 
 ## System diagram and components
 
-&#91;embedded content: system architecture · 3 agents, 2 services, 2 RAG variants\]
-
 The local UI talks to the intent router agent, which hands off to the product questions agent or the refunds agent. The product questions agent calls the RAG service (either variant) and the Orders service for inventory. The refunds agent calls the Orders service and escalates cases to a human reviewer. Amazon Bedrock provides the LLMs that generate the agents' responses.
+
+```mermaid
+flowchart TD
+    UI[Web chat UI, local] --> Router
+    subgraph AgentCore[Amazon Bedrock AgentCore]
+        Router[Intent router] --> Product[Product questions]
+        Router --> Refunds[Refunds]
+    end
+    Product -->|retrieve| RAG
+    Product -->|inventory| Orders
+    Refunds -->|order data, return policy| Orders
+    Refunds -->|escalate| Human[Human reviewer]
+    subgraph RAG[RAG service]
+        V1[v1: OpenSearch]
+        V2[v2: Amazon Bedrock]
+    end
+    subgraph Orders[Orders service]
+        APIGW[API Gateway] --> Lambda[Lambda] --> S3[(S3 static files)]
+    end
+    AgentCore -->|LLM calls| Bedrock[Amazon Bedrock]
+    CW[Amazon CloudWatch: logs, metrics, traces] -.- AgentCore
+    CW -.- RAG
+    CW -.- Orders
+```
 
 ## Agents
 
