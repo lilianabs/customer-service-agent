@@ -5,9 +5,6 @@ Loads order data from a local JSON file at startup and provides functions for
 order lookup, return-policy checks, refund status, refund-amount computation,
 and applying refunds (idempotent).
 
-This module is intentionally thin so it can be swapped for a real orders API
-later without changing the graph or the tool layer.
-
 Dates are stored relative to "today" (`purchased_days_ago`) and resolved to a
 concrete `purchased` date on load. That keeps the demo evergreen: the eligible
 order stays inside the 30-day return window no matter when someone clones and
