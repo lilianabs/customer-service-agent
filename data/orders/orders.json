@@ -33,13 +33,53 @@
     }
   },
   "inventory": {
-    "weekly-repair-mask": 12,
-    "repair-bond-oil": 0,
-    "hydra-wash-shampoo": 25,
-    "silk-slip-conditioner": 18,
-    "heat-shield-mist": 7,
-    "define-curl-cream": 15,
-    "air-dry-styling-gel": 9,
-    "scalp-reset-serum": 4
+    "WRM-001": {
+      "code": "WRM-001",
+      "product_key": "weekly-repair-mask",
+      "name": "Weekly Repair Mask",
+      "qty": 12
+    },
+    "RBO-001": {
+      "code": "RBO-001",
+      "product_key": "repair-bond-oil",
+      "name": "Repair Bond Oil",
+      "qty": 0
+    },
+    "HWS-001": {
+      "code": "HWS-001",
+      "product_key": "hydra-wash-shampoo",
+      "name": "Hydra Wash Shampoo",
+      "qty": 25
+    },
+    "SSC-001": {
+      "code": "SSC-001",
+      "product_key": "silk-slip-conditioner",
+      "name": "Silk Slip Conditioner",
+      "qty": 18
+    },
+    "HSM-001": {
+      "code": "HSM-001",
+      "product_key": "heat-shield-mist",
+      "name": "Heat Shield Mist",
+      "qty": 7
+    },
+    "DCC-001": {
+      "code": "DCC-001",
+      "product_key": "define-curl-cream",
+      "name": "Define Curl Cream",
+      "qty": 15
+    },
+    "ADSG-001": {
+      "code": "ADSG-001",
+      "product_key": "air-dry-styling-gel",
+      "name": "Air Dry Styling Gel",
+      "qty": 9
+    },
+    "SRS-001": {
+      "code": "SRS-001",
+      "product_key": "scalp-reset-serum",
+      "name": "Scalp Reset Serum",
+      "qty": 4
+    }
   }
 }

@@ -126,6 +126,18 @@ def refund_amount(order_number: str) -> float:
     return sum(item["price"] * item["qty"] for item in order.get("items", []))
 
 
+def get_product_inventory(product_code: str) -> dict | None:
+    """Return the inventory item for the given product code, or None if not found.
+
+    Returns a dict with:
+      - code: str (product code)
+      - product_key: str (original slug identifier)
+      - name: str (product name)
+      - qty: int (quantity in stock)
+    """
+    return _data.get("inventory", {}).get(product_code)
+
+
 def apply_refund(order_number: str) -> dict:
     """
     Apply a refund to an order (set refund_status to 'refunded').
