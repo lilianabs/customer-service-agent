@@ -38,15 +38,14 @@ Each day ends with an exit check; do not start the next day until it passes, or 
 - [✓] Add the orders service starter code.
 - [✓] Add the orders service infra starter code.
 - [✓] Add the Terraform starter code.
-- [ ] Set up the Terraform root in `infra/` with the S3 remote state.
 - [✓] Adapt the orders starter code.
 - [✓] Load static order and inventory data into S3.
 - [✓] Add global config for the project.
-- [ ] Deploy the `orders` module.
-- [ ] Write `scripts/destroy_all` (wrapping `terraform destroy`) and test it on the orders module; extend it as each module is added.
-- [ ] Write `orders_client` with a smoke test.
+- [✓] Deploy the `orders` module.
+- [✓] Write `scripts/destroy_all` (wrapping `terraform destroy`) and test it on the orders module; extend it as each module is added.
+- [✓] Write `orders_client` with a smoke test.
 
-**Exit check:** all five endpoints (`return_policy`, `get_order`, `refund_status`, `refund_amount`, `apply_refund`) respond through API Gateway.
+**Exit check:** all six endpoints (`return_policy`, `get_order`, `refund_status`, `refund_amount`, `apply_refund`, `get_product_inventory`) respond through API Gateway.
 
 ### Day 2: RAG variant v1 (OpenSearch)
 

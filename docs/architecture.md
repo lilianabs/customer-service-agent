@@ -119,6 +119,7 @@ The starter code, taken from the [AWS tutorial on LangGraph and Amazon Bedrock](
 - `refund_status`
 - `refund_amount`
 - `apply_refund`
+- `get_product_inventory`
 
 ## RAG evaluation plan
 

@@ -12,6 +12,7 @@ runs this repo.
 """
 
 import json
+import os
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -35,10 +36,26 @@ def _resolve_dates(orders: dict) -> None:
 
 
 def _load() -> None:
-    """Load the JSON data file into memory and resolve relative purchase dates."""
+    """Load the JSON data into memory and resolve relative purchase dates.
+
+    If the ORDERS_BUCKET env var is set (as in the deployed Lambda), the data
+    is read from s3://$ORDERS_BUCKET/$ORDERS_KEY (default key: orders.json).
+    Otherwise it is read from the local mock data file.
+
+    Note: refunds applied via `apply_refund` live only in this process's
+    memory, so they do not persist across Lambda cold starts or instances.
+    """
     global _data
-    with open(_DATA_PATH, "r") as f:
-        _data = json.load(f)
+    bucket = os.environ.get("ORDERS_BUCKET")
+    if bucket:
+        import boto3  # available in the Lambda runtime; imported lazily
+
+        key = os.environ.get("ORDERS_KEY", "orders.json")
+        body = boto3.client("s3").get_object(Bucket=bucket, Key=key)["Body"]
+        _data = json.load(body)
+    else:
+        with open(_DATA_PATH, "r") as f:
+            _data = json.load(f)
     _resolve_dates(_data.get("orders", {}))
 
 
