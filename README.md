@@ -1,5 +1,30 @@
 # customer-service-agent
 
+## Configuration
+
+Global configuration is stored in `config.json` and can be accessed by shell scripts and Python modules.
+
+**File locations:**
+- `config.json` — project configuration (committed to git)
+- `.env.example` — template for environment variables
+- `.env` / `.env.local` — local environment variables (excluded from git, for secrets)
+
+To use custom configuration:
+1. Copy `.env.example` to `.env` and update as needed
+2. Edit `config.json` for project-level settings
+
+**Using config in Python:**
+```python
+from config import get_aws_region, get_orders_bucket, get
+
+region = get_aws_region()  # From .env or config.json
+bucket = get_orders_bucket()
+custom_value = get("path.to.config.key")
+```
+
+**Using config in shell scripts:**
+Configuration is read from `config.json` using `jq`.
+
 ## Infrastructure
 
 ### Create Infrastructure
@@ -10,7 +35,7 @@ From the project root, run:
 ./scripts/create_infra.sh
 ```
 
-This creates the S3 bucket for orders data and uploads the orders data file. Configuration is managed in `scripts/config.sh` — update `ORDERS_BUCKET_NAME`, `AWS_REGION`, or `ORDERS_DATA_PATH` as needed.
+This creates the S3 bucket for orders data and uploads the orders data file. Configuration is read from `config.json`.
 
 ### Destroy Infrastructure
 

@@ -39,8 +39,9 @@ Each day ends with an exit check; do not start the next day until it passes, or 
 - [✓] Add the orders service infra starter code.
 - [✓] Add the Terraform starter code.
 - [ ] Set up the Terraform root in `infra/` with the S3 remote state.
-- [ ] Adapt the orders starter code
-- [ ] Load static order and inventory data into S3
+- [✓] Adapt the orders starter code.
+- [✓] Load static order and inventory data into S3.
+- [✓] Add global config for the project.
 - [ ] Deploy the `orders` module.
 - [ ] Write `scripts/destroy_all` (wrapping `terraform destroy`) and test it on the orders module; extend it as each module is added.
 - [ ] Write `orders_client` with a smoke test.

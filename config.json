@@ -1,0 +1,9 @@
+{
+  "aws": {
+    "region": "us-east-1"
+  },
+  "orders": {
+    "bucket_name": "orders-service-db",
+    "data_path": "data/orders/orders.json"
+  }
+}
