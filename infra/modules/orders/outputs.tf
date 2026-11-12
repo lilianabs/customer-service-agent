@@ -1,13 +1,4 @@
-# Copyright (c) HashiCorp, Inc.
-# SPDX-License-Identifier: MPL-2.0
-
 # Output value definitions
-
-output "lambda_bucket_name" {
-  description = "Name of the S3 bucket used to store function code."
-
-  value = aws_s3_bucket.lambda_bucket.id
-}
 
 output "function_name" {
   description = "Name of the Lambda function."
@@ -16,8 +7,7 @@ output "function_name" {
 }
 
 output "base_url" {
-  description = "Base URL for API Gateway stage."
+  description = "Base URL for the API Gateway stage."
 
-  value = aws_apigatewayv2_stage.lambda.invoke_url
+  value = aws_apigatewayv2_stage.orders_api.invoke_url
 }
-

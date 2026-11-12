@@ -1,130 +1,121 @@
-# Copyright (c) HashiCorp, Inc.
-# SPDX-License-Identifier: MPL-2.0
-
 provider "aws" {
   region = var.aws_region
 
   default_tags {
     tags = {
-      hashicorp-learn = "lambda-api-gateway"
+      project = "customer-service-assistant"
+      module  = "orders"
     }
   }
-
 }
 
-resource "random_pet" "lambda_bucket_name" {
-  prefix = "orders-lambda-bucket-"
-  length = 4
+locals {
+  # API Gateway route keys, one per Lambda endpoint.
+  routes = [
+    "GET /orders/{order_number}",
+    "GET /orders/{order_number}/return-policy",
+    "GET /orders/{order_number}/refund-status",
+    "GET /orders/{order_number}/refund-amount",
+    "POST /orders/{order_number}/refund",
+    "GET /inventory/{product_code}",
+  ]
 }
 
-resource "aws_s3_bucket" "lambda_bucket" {
-  bucket = random_pet.lambda_bucket_name.id
-}
-
-resource "aws_s3_bucket_ownership_controls" "lambda_bucket" {
-  bucket = aws_s3_bucket.lambda_bucket.id
-  rule {
-    object_ownership = "BucketOwnerPreferred"
-  }
-}
-
-resource "aws_s3_bucket_acl" "lambda_bucket" {
-  depends_on = [aws_s3_bucket_ownership_controls.lambda_bucket]
-
-  bucket = aws_s3_bucket.lambda_bucket.id
-  acl    = "private"
-}
+# --- Lambda package -----------------------------------------------------------
+# Order data is read from the S3 bucket created by scripts/create_infra.sh,
+# so the local mock data is not bundled. Powertools comes from a public layer.
 
 data "archive_file" "lambda_orders_api" {
   type = "zip"
 
-  source_dir  = "${path.module}/../services/orders"
-  output_path = "${path.module}/../services/orders/code.zip"
-}
+  source_dir  = "${path.module}/../../../services/orders"
+  output_path = "${path.module}/build/orders.zip"
 
-resource "aws_s3_object" "lambda_orders_api" {
-  bucket = aws_s3_bucket.lambda_bucket.id
-
-  key    = "code.zip"
-  source = data.archive_file.lambda_orders_api.output_path
-
-  etag = filemd5(data.archive_file.lambda_orders_api.output_path)
+  excludes = ["__pycache__", "mock_data", "code.zip"]
 }
 
 resource "aws_lambda_function" "orders_api" {
-  function_name = "Orders_API"
+  function_name = "orders-api"
 
-  s3_bucket = aws_s3_bucket.lambda_bucket.id
-  s3_key    = aws_s3_object.lambda_orders_api.key
+  filename         = data.archive_file.lambda_orders_api.output_path
+  source_code_hash = data.archive_file.lambda_orders_api.output_base64sha256
 
   runtime       = "python3.13"
   handler       = "lambda_function.lambda_handler"
   architectures = ["x86_64"]
+  layers        = [var.powertools_layer_arn]
 
-  source_code_hash = data.archive_file.lambda_orders_api.output_base64sha256
-
-  role = aws_iam_role.lambda_exec.arn
-
-  timeout = 300
+  role    = aws_iam_role.lambda_exec.arn
+  timeout = 30
 
   environment {
     variables = {
-      BEDROCK_REGION = "us-east-1"
-      MODEL_ID       = "us.anthropic.claude-sonnet-4-6"
+      ORDERS_BUCKET           = var.orders_bucket_name
+      ORDERS_KEY              = var.orders_data_key
+      POWERTOOLS_SERVICE_NAME = "orders"
+      POWERTOOLS_LOG_LEVEL    = "INFO"
     }
   }
+
+  depends_on = [aws_cloudwatch_log_group.orders_api]
 }
 
 resource "aws_cloudwatch_log_group" "orders_api" {
-  name = "/aws/lambda/${aws_lambda_function.orders_api.function_name}"
-
+  name              = "/aws/lambda/orders-api"
   retention_in_days = 30
 }
 
+# --- IAM ----------------------------------------------------------------------
+
 resource "aws_iam_role" "lambda_exec" {
-  name = "serverless_lambda"
+  name = "orders-lambda-exec"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Action = "sts:AssumeRole"
       Effect = "Allow"
-      Sid    = ""
       Principal = {
         Service = "lambda.amazonaws.com"
       }
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "lambda_policy" {
-  role       = aws_iam_role.lambda_exec.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-resource "aws_iam_role_policy" "lambda_bedrock_access" {
-  name = "lambda-bedrock-permissions"
-  role = aws_iam_role.lambda_exec.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
-      Resource = "*"
     }]
   })
 }
 
-resource "aws_apigatewayv2_api" "lambda" {
-  name          = "serverless_lambda_gw"
+resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "lambda_orders_data" {
+  name = "orders-data-read"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["s3:GetObject"]
+      Resource = "arn:aws:s3:::${var.orders_bucket_name}/${var.orders_data_key}"
+    }]
+  })
+}
+
+# --- API Gateway (HTTP API) ---------------------------------------------------
+
+resource "aws_apigatewayv2_api" "orders_api" {
+  name          = "orders-api"
   protocol_type = "HTTP"
 }
 
-resource "aws_apigatewayv2_stage" "lambda" {
-  api_id = aws_apigatewayv2_api.lambda.id
+resource "aws_cloudwatch_log_group" "api_gw" {
+  name              = "/aws/api_gw/${aws_apigatewayv2_api.orders_api.name}"
+  retention_in_days = 30
+}
 
-  name        = "serverless_lambda_stage"
+resource "aws_apigatewayv2_stage" "orders_api" {
+  api_id      = aws_apigatewayv2_api.orders_api.id
+  name        = "v1"
   auto_deploy = true
 
   access_log_settings {
@@ -141,30 +132,25 @@ resource "aws_apigatewayv2_stage" "lambda" {
       status                  = "$context.status"
       responseLength          = "$context.responseLength"
       integrationErrorMessage = "$context.integrationErrorMessage"
-      }
-    )
+    })
   }
 }
 
-resource "aws_apigatewayv2_integration" "ai_api" {
-  api_id = aws_apigatewayv2_api.lambda.id
+resource "aws_apigatewayv2_integration" "orders_api" {
+  api_id = aws_apigatewayv2_api.orders_api.id
 
-  integration_uri    = aws_lambda_function.orders_api.invoke_arn
-  integration_type   = "AWS_PROXY"
-  integration_method = "POST"
+  integration_uri        = aws_lambda_function.orders_api.invoke_arn
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  payload_format_version = "2.0"
 }
 
 resource "aws_apigatewayv2_route" "orders_api" {
-  api_id = aws_apigatewayv2_api.lambda.id
+  for_each = toset(local.routes)
 
-  route_key = "POST /chat"
+  api_id    = aws_apigatewayv2_api.orders_api.id
+  route_key = each.value
   target    = "integrations/${aws_apigatewayv2_integration.orders_api.id}"
-}
-
-resource "aws_cloudwatch_log_group" "api_gw" {
-  name = "/aws/api_gw/${aws_apigatewayv2_api.lambda.name}"
-
-  retention_in_days = 30
 }
 
 resource "aws_lambda_permission" "api_gw" {
@@ -173,5 +159,5 @@ resource "aws_lambda_permission" "api_gw" {
   function_name = aws_lambda_function.orders_api.function_name
   principal     = "apigateway.amazonaws.com"
 
-  source_arn = "${aws_apigatewayv2_api.lambda.execution_arn}/*/*"
+  source_arn = "${aws_apigatewayv2_api.orders_api.execution_arn}/*/*"
 }

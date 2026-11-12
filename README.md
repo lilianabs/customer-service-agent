@@ -35,7 +35,7 @@ From the project root, run:
 ./scripts/create_infra.sh
 ```
 
-This creates the S3 bucket for orders data and uploads the orders data file. Configuration is read from `config.json`.
+This creates the S3 bucket for orders data, uploads the orders data file, deploys the orders module (Lambda + API Gateway) with Terraform, and runs the smoke tests (`scripts/smoke_test_orders.sh`, which can also be run on its own against any base URL). Configuration is read from `config.json`.
 
 ### Destroy Infrastructure
 
@@ -45,7 +45,7 @@ To remove all created resources:
 ./scripts/destroy_infra.sh
 ```
 
-This removes the S3 bucket and all its contents (requires confirmation).
+This destroys the orders module and removes the S3 bucket and all its contents (requires confirmation).
 
 See [infra/created_resources.md](infra/created_resources.md) for a list of resources.
 
