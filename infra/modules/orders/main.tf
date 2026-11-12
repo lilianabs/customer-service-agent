@@ -13,7 +13,7 @@ provider "aws" {
 }
 
 resource "random_pet" "lambda_bucket_name" {
-  prefix = "serverless-api-ai"
+  prefix = "orders-lambda-bucket-"
   length = 4
 }
 
@@ -35,33 +35,33 @@ resource "aws_s3_bucket_acl" "lambda_bucket" {
   acl    = "private"
 }
 
-data "archive_file" "lambda_ai_api" {
+data "archive_file" "lambda_orders_api" {
   type = "zip"
 
-  source_dir  = "${path.module}/../code"
-  output_path = "${path.module}/../code.zip"
+  source_dir  = "${path.module}/../services/orders"
+  output_path = "${path.module}/../services/orders/code.zip"
 }
 
-resource "aws_s3_object" "lambda_ai_api" {
+resource "aws_s3_object" "lambda_orders_api" {
   bucket = aws_s3_bucket.lambda_bucket.id
 
   key    = "code.zip"
-  source = data.archive_file.lambda_ai_api.output_path
+  source = data.archive_file.lambda_orders_api.output_path
 
-  etag = filemd5(data.archive_file.lambda_ai_api.output_path)
+  etag = filemd5(data.archive_file.lambda_orders_api.output_path)
 }
 
-resource "aws_lambda_function" "ai_api" {
-  function_name = "AI_API"
+resource "aws_lambda_function" "orders_api" {
+  function_name = "Orders_API"
 
   s3_bucket = aws_s3_bucket.lambda_bucket.id
-  s3_key    = aws_s3_object.lambda_ai_api.key
+  s3_key    = aws_s3_object.lambda_orders_api.key
 
   runtime       = "python3.13"
   handler       = "lambda_function.lambda_handler"
   architectures = ["x86_64"]
 
-  source_code_hash = data.archive_file.lambda_ai_api.output_base64sha256
+  source_code_hash = data.archive_file.lambda_orders_api.output_base64sha256
 
   role = aws_iam_role.lambda_exec.arn
 
@@ -75,8 +75,8 @@ resource "aws_lambda_function" "ai_api" {
   }
 }
 
-resource "aws_cloudwatch_log_group" "ai_api" {
-  name = "/aws/lambda/${aws_lambda_function.ai_api.function_name}"
+resource "aws_cloudwatch_log_group" "orders_api" {
+  name = "/aws/lambda/${aws_lambda_function.orders_api.function_name}"
 
   retention_in_days = 30
 }
@@ -149,16 +149,16 @@ resource "aws_apigatewayv2_stage" "lambda" {
 resource "aws_apigatewayv2_integration" "ai_api" {
   api_id = aws_apigatewayv2_api.lambda.id
 
-  integration_uri    = aws_lambda_function.ai_api.invoke_arn
+  integration_uri    = aws_lambda_function.orders_api.invoke_arn
   integration_type   = "AWS_PROXY"
   integration_method = "POST"
 }
 
-resource "aws_apigatewayv2_route" "ai_api" {
+resource "aws_apigatewayv2_route" "orders_api" {
   api_id = aws_apigatewayv2_api.lambda.id
 
   route_key = "POST /chat"
-  target    = "integrations/${aws_apigatewayv2_integration.ai_api.id}"
+  target    = "integrations/${aws_apigatewayv2_integration.orders_api.id}"
 }
 
 resource "aws_cloudwatch_log_group" "api_gw" {
@@ -170,7 +170,7 @@ resource "aws_cloudwatch_log_group" "api_gw" {
 resource "aws_lambda_permission" "api_gw" {
   statement_id  = "AllowExecutionFromAPIGateway"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.ai_api.function_name
+  function_name = aws_lambda_function.orders_api.function_name
   principal     = "apigateway.amazonaws.com"
 
   source_arn = "${aws_apigatewayv2_api.lambda.execution_arn}/*/*"
