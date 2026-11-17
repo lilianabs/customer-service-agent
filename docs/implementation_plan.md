@@ -49,6 +49,7 @@ Each day ends with an exit check; do not start the next day until it passes, or 
 
 ### Day 2: RAG variant v1 (OpenSearch)
 
+- [✓] Add RAG variannt v1 exploration notebook.
 - [ ] Define the `Retriever` interface and the `RAG_VARIANT` selection.
 - [ ] Build the ingestion pipeline: load, chunk, embed and index the source documents.
 - [ ] Deploy the `rag` module for v1.

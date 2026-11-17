@@ -9,3 +9,6 @@ __pycache__/
 .terraform/
 build/
 *.tfstate*
+
+# Notebook embedding cache
+notebooks/.cache/

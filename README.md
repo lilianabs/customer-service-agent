@@ -61,3 +61,35 @@ uv run python -m http.server 5500
 In a web browser, go to `http://localhost:5500/`.
 
 **Note:** This project is using the starter code from [AnyCompany Hair Care: build a LangGraph agent on Amazon Bedrock](https://github.com/sdahal1/anycompany-hair-care-langgraph-tutorial/tree/main).
+
+## Notebooks
+
+The notebooks in `notebooks/` explore design choices before they go into the services. They are not part of the deployed system.
+
+| Notebook | Purpose |
+| --- | --- |
+| `01_rag_v1_exploration.ipynb` | Explore the knowledge base, compare chunking strategies, and compare keyword, semantic and hybrid retrieval, then replay the chosen setup in OpenSearch |
+
+**Setup**
+
+1. Install the notebook dependencies (a separate `notebook` group in `pyproject.toml`):
+
+   ```bash
+   uv sync --group notebook
+   ```
+
+2. Start Jupyter Lab from the project root:
+
+   ```bash
+   uv run --group notebook jupyter lab notebooks/
+   ```
+
+   In VS Code, instead open the notebook and select the `.venv` interpreter as the kernel.
+
+**Requirements by section**
+
+- **Dataset, chunking and in-memory retrieval:** nothing extra. These sections run offline.
+- **Semantic and hybrid retrieval:** AWS credentials with access to Amazon Bedrock (Titan Text Embeddings V2) in the region set in `config.json`. Embeddings are cached in `notebooks/.cache/`, which is git-ignored.
+- **OpenSearch:** a running OpenSearch instance. For local development, start one with Docker. The notebook has the exact command in its OpenSearch section. To use an AWS domain instead, set `OPENSEARCH_TARGET=aws` and `OPENSEARCH_HOST=<domain endpoint>` before starting Jupyter. Destroy the domain when you're done measuring, because it has a running cost.
+
+Run the cells in order from top to bottom. Some cells depend on values set earlier, such as `STRATEGY` and `ALPHA`.
