@@ -12,3 +12,4 @@ build/
 
 # Notebook embedding cache
 notebooks/.cache/
+notebooks/.ipynb_checkpoints/
