@@ -16,15 +16,15 @@ The plan builds the system from the architecture doc in 7 days, working 5 to 8 h
 
 Services first, then the RAG comparison, then the agents, and the system evaluation last.
 
-| Day | Focus | Outcome |
-| --- | --- | --- |
-| 1 | Repo, Terraform, orders service | Orders endpoints live on AWS |
-| 2 | RAG variant v1 (OpenSearch) | Retriever returns passages from the source documents |
-| 3 | RAG variant v2 (Bedrock) and golden set | Both variants behind one interface, golden set written |
-| 4 | RAG experiment | Results table and variant decision |
-| 5 | Agents and guardrails | Three agents working locally |
-| 6 | Agents on AgentCore, UI, observability | End-to-end conversation through the web chat UI |
-| 7 | System evaluation and wrap-up | System metrics, regression test, docs updated |
+| Day | Focus                                   | Outcome                                                |
+| --- | --------------------------------------- | ------------------------------------------------------ |
+| 1   | Repo, Terraform, orders service         | Orders endpoints live on AWS                           |
+| 2   | RAG variant v1 (OpenSearch)             | Retriever returns passages from the source documents   |
+| 3   | RAG variant v2 (Bedrock) and golden set | Both variants behind one interface, golden set written |
+| 4   | RAG experiment                          | Results table and variant decision                     |
+| 5   | Agents and guardrails                   | Three agents working locally                           |
+| 6   | Agents on AgentCore, UI, observability  | End-to-end conversation through the web chat UI        |
+| 7   | System evaluation and wrap-up           | System metrics, regression test, docs updated          |
 
 ## Daily plan
 
@@ -47,34 +47,21 @@ Each day ends with an exit check; do not start the next day until it passes, or 
 
 **Exit check:** all six endpoints (`return_policy`, `get_order`, `refund_status`, `refund_amount`, `apply_refund`, `get_product_inventory`) respond through API Gateway.
 
-### Day 2: RAG variant v1 (OpenSearch)
-
-- [✓] Add RAG variannt v1 exploration notebook.
-- [✓] Experiment design for variants v1 and v2.
-- [ ] Define the `Retriever` interface and the `RAG_VARIANT` selection.
-- [ ] Build the ingestion pipeline: load, chunk, embed and index the source documents.
-- [ ] Deploy the `rag` module for v1.
-
-**Exit check:** a test question returns relevant passages with their sources from OpenSearch.
-
-### Day 3: RAG variant v2 (Bedrock) and golden set
-
-- [ ] Deploy the `rag` module for v2 and sync the Knowledge Base from S3.
-- [ ] Make v2 implement the same `Retriever` interface.
-- [ ] Write the golden set under `data/eval/`: questions with expected answers and expected source documents.
-- [ ] Write down how the variants differ (chunking, ranking) before measuring.
-
-**Exit check:** the same question works against both variants by changing only `RAG_VARIANT`.
+### Day 2-3: RAG system
+- [ ] Agree on the version v0.
+- [ ] Experiment to get a baseline for v0.
+- [ ] Define the experiment for v1 and v2.
+- [ ] Implement v0 on a notebook.
+- [ ] Deploy v0 to AWS.
 
 ### Day 4: RAG experiment
 
-- [ ] Agree the decision rule (quality, then cost, then latency) before running.
+- [ ] Create a golden set with ragas.
 - [ ] Build the experiment runner under `evals/rag/` with RAGAS and the LLM-as-judge evals.
-- [ ] Run both variants on the golden set, several runs per question, and save results under `evals/results/`.
-- [ ] Produce the results table and write the variant decision under `docs/`.
-- [ ] Add RAGAS to the CI/CD regression test.
+- [ ] Run on the golden set, several runs per question, and save results under `evals/results/`.
+- [ ] Add ragas to the CI/CD regression test.
 
-**Exit check:** one results table covers retrieval quality, answer quality, latency and cost for both variants, and the decision is recorded.
+**Exit check:** one results table covers retrieval quality, answer quality, latency and cost for v0.
 
 ### Day 5: Agents and guardrails
 
@@ -107,29 +94,60 @@ Each day ends with an exit check; do not start the next day until it passes, or 
 
 Each component gets a one-page brief with its implementation details, written in the first 30 minutes of the day it is built, so the design is fixed before coding.
 
-| Brief | Written on | Covers |
-| --- | --- | --- |
-| Infrastructure | Day 1 | Terraform layout, state, naming, IAM, destroy script |
-| Orders service | Day 1 | Endpoints, data files in S3, request and response shapes |
-| RAG service | Day 2 | `Retriever` interface, ingestion, both variants and how they differ |
-| Evaluations | Day 3 | Golden set format, metrics, runner, results layout |
-| Agents | Day 5 | Graphs, tools, handoffs, escalation, memory, guardrails |
+| Brief          | Written on | Covers                                                              |
+| -------------- | ---------- | ------------------------------------------------------------------- |
+| Infrastructure | Day 1      | Terraform layout, state, naming, IAM, destroy script                |
+| Orders service | Day 1      | Endpoints, data files in S3, request and response shapes            |
+| RAG service    | Day 2      | `Retriever` interface, ingestion, both variants and how they differ |
+| Evaluations    | Day 3      | Golden set format, metrics, runner, results layout                  |
+| Agents         | Day 5      | Graphs, tools, handoffs, escalation, memory, guardrails             |
 
 ## Risks and cut line
 
 If a day slips by more than 2 hours, cut from the top of this list first.
 
-| Priority to cut | What to drop | Effect |
-| --- | --- | --- |
-| 1 | Long-term memory (day 6) | Short-term memory only; long-term stays a roadmap item |
-| 2 | Other system metrics (day 7) | Only cost per conversation, p50 and p95 latency |
-| 3 | Different model per agent (day 5) | One model for all agents |
-| 4 | RAGAS in CI/CD (day 4) | RAGAS runs manually until later |
+| Priority to cut | What to drop                      | Effect                                                 |
+| --------------- | --------------------------------- | ------------------------------------------------------ |
+| 1               | Long-term memory (day 6)          | Short-term memory only; long-term stays a roadmap item |
+| 2               | Other system metrics (day 7)      | Only cost per conversation, p50 and p95 latency        |
+| 3               | Different model per agent (day 5) | One model for all agents                               |
+| 4               | RAGAS in CI/CD (day 4)            | RAGAS runs manually until later                        |
 
-| Risk | Mitigation |
-| --- | --- |
-| Golden set takes longer than the 3 to 4 hours on day 3 | Start with about 20 questions and grow it later |
+| Risk                                                    | Mitigation                                                                              |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Golden set takes longer than the 3 to 4 hours on day 3  | Start with about 20 questions and grow it later                                         |
 | OpenSearch or Knowledge Base setup is slow to provision | Deploy the day 2 and day 3 modules early in the day and write code while they provision |
-| Bedrock model access or quota limits | Check access on day 1 and request quota increases early |
-| AgentCore deployment issues on day 6 | Test the agents locally on day 5 so only deployment is left to debug |
-| OpenSearch running cost | Destroy it when not measuring |
+| Bedrock model access or quota limits                    | Check access on day 1 and request quota increases early                                 |
+| AgentCore deployment issues on day 6                    | Test the agents locally on day 5 so only deployment is left to debug                    |
+| OpenSearch running cost                                 | Destroy it when not measuring                                                           |
+
+
+## Future steps
+We have decided to implement a simpler version of the RAG system (v0) to move quickly to testing the agentic system as a whole. After doing this, we'll go back and complement the experimentation of v1/v2.
+
+### Day 2: RAG variant v1 (OpenSearch)
+
+- [✓] Add RAG variannt v1 exploration notebook.
+- [✓] Experiment design for variants v1 and v2.
+- [ ] Define the `Retriever` interface and the `RAG_VARIANT` selection.
+- [ ] Build the ingestion pipeline: load, chunk, embed and index the source documents.
+- [ ] Deploy the `rag` module for v1.
+
+**Exit check:** a test question returns relevant passages with their sources from OpenSearch.
+
+### Day 3: RAG variant v2 (Bedrock) and golden set
+
+- [ ] Deploy the `rag` module for v2 and sync the Knowledge Base from S3.
+- [ ] Make v2 implement the same `Retriever` interface.
+- [ ] Write the golden set under `data/eval/`: questions with expected answers and expected source documents.
+- [ ] Write down how the variants differ (chunking, ranking) before measuring.
+
+**Exit check:** the same question works against both variants by changing only `RAG_VARIANT`.
+
+### Day 4: RAG experiment
+
+- [ ] Agree the decision rule (quality, then cost, then latency) before running.
+- [ ] Build the experiment runner under `evals/rag/` with RAGAS and the LLM-as-judge evals.
+- [ ] Run both variants on the golden set, several runs per question, and save results under `evals/results/`.
+- [ ] Produce the results table and write the variant decision under `docs/`.
+- [ ] Add RAGAS to the CI/CD regression test.
