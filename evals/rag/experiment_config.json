@@ -1,0 +1,72 @@
+{
+  "name": "rag-v1-vs-v2",
+  "version": 1,
+  "created": "2026-11-18",
+  "source": "notebooks/02_rag_experiment_design.ipynb",
+  "hypothesis": "With identical chunks, embeddings, retrieval mode and top-k, v1 and v2 reach the same retrieval quality within noise (|delta MRR| < one question). v2 costs less per month and needs less operational work. Latencies differ by less than 100 ms at p50.",
+  "factor": {
+    "name": "retrieval platform",
+    "levels": {
+      "v1": "Amazon OpenSearch Service managed domain; our ingestion pipeline embeds and indexes chunks",
+      "v2": "Amazon Bedrock Knowledge Base on an Amazon S3 Vectors store; KB sync embeds and indexes chunks"
+    },
+    "baseline": "v1"
+  },
+  "controlled": {
+    "corpus": "data/knowledge_base/ (same git commit for both arms)",
+    "chunking": {
+      "strategy": "markdown",
+      "implementation": "our chunker writes one file per chunk; KB data source uses chunkingStrategy NONE",
+      "metadata_fields": [
+        "doc_id",
+        "chunk_id",
+        "title",
+        "section"
+      ],
+      "prompt_format": "rag_client prepends '<title> | <section>' to each passage it gives the LLM"
+    },
+    "embedding": {
+      "model_id": "amazon.titan-embed-text-v2:0",
+      "dimensions": 1024,
+      "normalize": true
+    },
+    "retrieval": {
+      "mode": "semantic",
+      "distance": "cosine",
+      "top_k": 3,
+      "reranking": null,
+      "filters": null
+    },
+    "generation": {
+      "model_id": null,
+      "temperature": 0,
+      "prompt": null
+    },
+    "eval_set": "data/eval/ golden set (Day 3)"
+  },
+  "parity_check": {
+    "metric": "mean Jaccard overlap of top-k chunk_ids",
+    "pass_if": ">= 0.9"
+  },
+  "metrics": {
+    "retrieval": [
+      "hit@1",
+      "hit@3",
+      "recall@3",
+      "mrr"
+    ],
+    "answer": [
+      "faithfulness",
+      "answer_relevancy"
+    ],
+    "latency": [
+      "p50_ms",
+      "p95_ms"
+    ],
+    "cost": [
+      "cost_per_query_usd",
+      "fixed_monthly_usd"
+    ]
+  },
+  "decision_rule": "docs/architecture.md, RAG evaluation plan"
+}

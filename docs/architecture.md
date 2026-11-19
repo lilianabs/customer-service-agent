@@ -1,6 +1,6 @@
 # Customer Service Agent: Architecture
 
-Nov 11, 2026 · @Liliana Badillo
+Nov 11, 2026 · Last updated Nov 18, 2026 · @Liliana Badillo
 
 ## Overview and goals
 
@@ -34,7 +34,8 @@ A customer service agent for a hair care products company, deployed entirely on 
 | Agent runtime | AgentCore |
 | LLMs (response generation) | Amazon Bedrock |
 | RAG regression testing | RAGAS |
-| RAG variants | OpenSearch, Amazon Bedrock |
+| RAG variants | OpenSearch, Amazon Bedrock Knowledge Bases with Amazon S3 Vectors |
+| Embeddings | Amazon Titan Text Embeddings V2 |
 | Orders service | AWS Lambda, API Gateway, S3 |
 | Observability | Amazon CloudWatch, OpenTelemetry |
 | Infrastructure | Terraform |
@@ -56,7 +57,7 @@ flowchart TD
     Refunds -->|escalate| Human[Human reviewer]
     subgraph RAG[RAG service]
         V1[v1: OpenSearch]
-        V2[v2: Amazon Bedrock]
+        V2[v2: Bedrock Knowledge Base + S3 Vectors]
     end
     subgraph Orders[Orders service]
         APIGW[API Gateway] --> Lambda[Lambda] --> S3[(S3 static files)]
@@ -91,16 +92,32 @@ One service exposes a single retrieval contract and two interchangeable backends
 
 |  | v1: OpenSearch | v2: Amazon Bedrock |
 | --- | --- | --- |
-| Vector store | Amazon OpenSearch | Managed by Bedrock Knowledge Bases (assumed) |
-| Ingestion | Own pipeline: load, chunk, embed, index | Knowledge Base sync from S3 |
-| Control over retrieval | High (chunking, hybrid search, reranking) | Limited to what the service exposes |
+| Vector store | Amazon OpenSearch Service | Amazon S3 Vectors, attached to a Bedrock Knowledge Base |
+| Ingestion | Own pipeline: embed and index the shared chunks | Knowledge Base sync from S3, with `chunkingStrategy: NONE` (each file is one chunk) |
+| Control over retrieval | High (chunking, hybrid search, reranking) | Limited to what the service exposes; semantic search only on S3 Vectors |
 | Operational effort | Higher | Lower |
 
-Both variants read the same source documents (product catalog, FAQs) from S3 and implement the same `Retriever` interface. The variant is selected by an environment variable, `RAG_VARIANT` (`v1` or `v2`), which Terraform sets for the deployed system and the evals override per run.
+Both variants implement the same `Retriever` interface. The variant is selected by an environment variable, `RAG_VARIANT` (`v1` or `v2`), which Terraform sets for the deployed system and the evals override per run.
 
-The variants differ in chunking strategy, ranking and other dimensions still to be decided. Cost and latency are measured for both variants, alongside retrieval and answer quality.
+**Why S3 Vectors for v2:** a Knowledge Base doesn't store vectors itself; it needs an attached vector store. S3 Vectors is billed per use, so it costs almost nothing when idle, and it is a different backend from v1. With OpenSearch Serverless or an OpenSearch managed cluster, both variants would run on OpenSearch and the comparison would mostly disappear. Serverless also bills a minimum capacity even when idle.
 
-To keep the comparison meaningful, the differences between the variants should be written down before measuring, so each result can be traced to its cause.
+### Experiment design
+
+The comparison is a controlled experiment: the only thing that changes between the variants is the retrieval platform. All other RAG parameters are fixed to options both services can implement the same way. They were chosen in `notebooks/02_rag_experiment_design.ipynb` and are frozen in `evals/rag/experiment_config.json`, which the v1 ingestion, the v2 Terraform and the eval runner all read.
+
+| Parameter | Value | Why |
+| --- | --- | --- |
+| Chunking | One chunk per `##` markdown section, produced by our own chunker | The only way to give both variants identical chunks. It also scored best on the seed eval set (MRR 1.000, against 0.852 for 300-token windows like the Knowledge Base default) |
+| How v2 gets the chunks | One S3 file per chunk, plus a `.metadata.json` sidecar; Knowledge Base chunking set to `NONE` | The Knowledge Base's own chunkers can't be reproduced exactly in v1 |
+| Chunk metadata | `doc_id`, `chunk_id`, `title`, `section` | `rag_client` adds `"<title> \| <section>"` to each passage it gives the LLM, because section chunks don't name their product |
+| Embedding model | Amazon Titan Text Embeddings V2, 1024 dimensions, normalised | Supported by both; at about 80 chunks, size doesn't affect cost |
+| Retrieval mode | Semantic (k-NN), cosine distance, no reranking | S3 Vectors is semantic-only, and the Knowledge Base's hybrid score fusion can't be configured. Hybrid gave no gain on this corpus |
+| top-k | 3 | Recall reached 1.0 at k=2; 3 leaves room for questions that compare products |
+| Answer generation | Same model, prompt and temperature 0 for both variants | Still to be decided (Day 3) |
+
+**What the result should look like:** with these parameters fixed, both variants run cosine search over the same vectors, so retrieval quality should come out about equal. The comparison is then decided mainly by cost, latency and operational effort. A large quality gap would point to a setup bug rather than a real difference.
+
+**Differences that come with the platform:** these can't be removed, so they are the first suspects when results differ. Each variant uses its own approximate index (Lucene HNSW in v1, S3 Vectors' index in v2). In v1 our code calls the embedding model; in v2 the Knowledge Base does, inside its retrieve call. The Knowledge Base also parses the markdown files itself, and its scores use a different scale, so results are compared by rank, never by raw score.
 
 ## Orders service
 
@@ -136,7 +153,11 @@ Both variants run against the same golden question set, and one script writes a 
 
 **Decision rule:** agree on the weighting before running (for example, quality first, then cost, then latency), so the choice is not made after seeing the numbers.
 
-**Experiment setup:** both variants index the same source documents and answer the same golden set. Each question runs several times so latency numbers are stable, and results are saved per run under `evals/results/` so the variants can be compared over time.
+**Experiment setup:** both variants index the same chunk files, use the parameters in `evals/rag/experiment_config.json` (see Experiment design above) and answer the same golden set. Each question runs several times so latency numbers are stable, and results are saved per run under `evals/results/` so the variants can be compared over time. If the spec has to change, bump its `version` and rerun both variants, so results from different specs are never compared.
+
+**Hypothesis:** both variants reach the same retrieval quality within noise (an MRR difference smaller than one question), v2 costs less per month and needs less operational work, and p50 latencies differ by less than 100 ms.
+
+**Parity check:** run this first, before measuring. For each golden question, compare the top-k `chunk_id`s the two variants return. The mean overlap (intersection over union) should be at least 0.9. Investigate every question where the first result differs, starting by comparing the chunk text v2 stored with the file it came from.
 
 **Regression testing:** RAGAS runs in the CI/CD pipeline on the golden set against each variant whenever the RAG code, prompts or documents change, so drops in retrieval or answer quality are caught early.
 
@@ -160,8 +181,8 @@ One Terraform root in `infra/`, one environment, with a module per service. The 
 | Module | Provisions |
 | --- | --- |
 | `orders` | S3 bucket for static data, Lambda function, API Gateway, IAM roles |
-| `rag` (v1) | OpenSearch domain or collection, ingestion resources, IAM |
-| `rag` (v2) | Bedrock Knowledge Base, S3 source bucket, IAM |
+| `rag` (v1) | OpenSearch domain, ingestion resources, IAM |
+| `rag` (v2) | Bedrock Knowledge Base (chunking `NONE`), S3 Vectors bucket and index (1024 dimensions, cosine), S3 source bucket of chunk files, IAM |
 | `agents` | AgentCore runtime and agents, IAM for Bedrock model access |
 
 - **State:** remote backend in S3.
@@ -197,9 +218,10 @@ Everything is observed in Amazon CloudWatch. AgentCore already provides built-in
 haircare-support-agent/
 ├── data/            eval/ (golden set), knowledge_base/, orders_seed/
 ├── docs/            architecture, decision records, rag-evaluation
-├── evals/           agents/, rag/ (experiment runner, compare), results/, system/ (cost, latency)
+├── evals/           agents/, rag/ (experiment_config.json, experiment runner, compare), results/, system/ (cost, latency)
 ├── frontend/        local web chat (not deployed)
 ├── infra/           main.tf, variables.tf, outputs.tf, modules/{agents,orders,rag}
+├── notebooks/       01 RAG v1 exploration, 02 RAG experiment design
 ├── scripts/         ingest_kb, package_lambda, smoke_test
 └── services/
     ├── agents/      intent_router/, product_qa/, prompts/, refunds/, tools/
@@ -215,6 +237,19 @@ Planned after the first working version:
 - **Monitoring dashboard:** a dashboard to watch the running system.
 - **Security:** additional guardrails that protect the system from attacks, added to the Guardrails table.
 
+## History
+
+Changes to this document and the decisions behind them, newest first. Add a row whenever a design decision changes. Larger decisions get their own record in `docs/adr/`, linked from the row.
+
+| Date | Change | Why / where it was decided |
+| --- | --- | --- |
+| 2026-11-18 | RAG v2 uses Amazon S3 Vectors as the Knowledge Base vector store. Added the Experiment design subsection, which fixes chunking (one chunk per `##` section, Knowledge Base chunking `NONE`), embeddings (Titan Text Embeddings V2, 1024 dimensions), retrieval mode (semantic, cosine, no reranking) and top-k (3). Added the hypothesis and parity check to the RAG evaluation plan. Updated the tech stack, diagram, Terraform `rag` rows and repo structure to match | The variants need to differ only in the retrieval platform, so the other RAG parameters are limited to options both services support. Decided in `notebooks/02_rag_experiment_design.ipynb`; frozen in `evals/rag/experiment_config.json` |
+| 2026-11-12 | Added the `get_product_inventory` endpoint to the orders service | The product questions agent needs inventory. See [ADR: Orders service architecture](adr/orders_service.md) |
+| 2026-11-11 | First version, including the system diagram | Initial design |
+
 ## Sources
 
 - [What is LangGraph? A Beginner's Guide to AI Agents on Amazon Bedrock](https://builder.aws.com/content/3HS7p4Dme6C7ZXTZTq0Edy2NzPB/what-is-langgraph-a-beginners-guide-to-ai-agents-on-amazon-bedrock): AWS tutorial the orders service starter code comes from.
+- [Bedrock ChunkingConfiguration](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent_ChunkingConfiguration.html): the `NONE` strategy, where each file becomes one chunk.
+- [Configure Knowledge Base queries](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-test-config.html): which vector stores support hybrid search.
+- [Using S3 Vectors with Bedrock Knowledge Bases](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-bedrock-kb.html): semantic-only search and metadata limits.
