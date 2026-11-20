@@ -12,7 +12,7 @@ The product questions agent needs product informatiomation and inventory. It rea
 
 The RAG product information system consists of 3 versions:
 
-- **v0**: Uses Amazon Bedrock Knowledge Base with settings out of the box.
+- **v0**: Uses Amazon Bedrock Knowledge Base (Managed KB) with settings out of the box.
 - **v1**: Uses Opensearch with more advanced settings.
 - **v2**: Uses Amazon Bedrock Knowledge Base with custom settings.
 
@@ -20,7 +20,7 @@ The RAG product information system consists of 3 versions:
 
 This is an Amazon Bedrock knowledge base with the following components:
 
-- Chuncking strategy: Fix-size with overlap.
-- Embeddings: Amazon Titan Text Embeddings model.
+- Chuncking strategy: Default chunking - text is spplited into chunks of approximately 300 tokens.
+- Embeddings: Managed embedding.
 - Retrieval: Semantic search.
 - top-k: TBD
