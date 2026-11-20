@@ -51,8 +51,8 @@ Each day ends with an exit check; do not start the next day until it passes, or 
 - [ ] Agree on the version v0.
 - [ ] Experiment to get a baseline for v0.
 - [ ] Define the experiment for v1 and v2.
-- [ ] Implement v0 on a notebook.
-- [ ] Deploy v0 to AWS.
+- [✓] Add experimentation with the managed Amazon Bedrock KB to obtain retrieval metrics fov v0.
+- [ ] Deploy KB (v0) to AWS.
 
 ### Day 4: RAG experiment
 
