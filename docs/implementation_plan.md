@@ -63,6 +63,7 @@ Each day ends with an exit check; do not start the next day until it passes, or 
 
 - [ ] Build the LangGraph graph for the intent router, product questions and refunds agents.
 - [ ] Write `rag_client` for the product information KB, `orders_client` for the refunds agent, the tool wiring for both, and the escalation summary for a human.
+- [ ] Run evals using ragas for product information component and refunds agent.
 - [ ] Add the guardrails: max request length, max tokens and `recursion_limit`.
 - [ ] Add a first version of short-term memory and choose a model per agent.
 - [ ] Add a first version of long-term memory if time allows.
