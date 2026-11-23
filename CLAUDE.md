@@ -94,6 +94,7 @@ uv run python scripts/smoke_test_kb_v0.py    # KB status, ingestion status, 18-q
 ./infra/modules/rag_v0/destroy_kb_infra.sh   # removes KB, IAM role and S3 bucket (asks for confirmation)
 ```
 - `scripts/create_infra.sh` and `scripts/destroy_infra.sh` run these steps with the orders stack.
+- The MCP server (`services/mcp-server/`, AgentCore Runtime) is deployed by `create_infra.sh` after the KB, and destroyed first by `destroy_infra.sh`. It runs `scripts/smoke_test_mcp.sh` at the end of create.
 - State lives in the `rag_v0` section of `config.json` (`bucket_name`, `kb_id`, `data_source_id`). Create writes it, destroy clears it.
 - Requires AWS CLI v2 with `bedrock-agent` commands.
 
