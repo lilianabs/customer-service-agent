@@ -1,15 +1,19 @@
 #!/bin/bash
 # Destroy infrastructure resources for the RAG v0 knowledge base and the orders service:
-#   1. the RAG v0 knowledge base (KB, IAM role, S3 bucket)
-#   2. the orders module (Lambda + API Gateway) via Terraform
-#   3. the S3 bucket holding the orders data
+#   1. the MCP server on AgentCore Runtime (runtime, execution role, ECR images)
+#   2. the RAG v0 knowledge base (KB, IAM role, S3 bucket)
+#   3. the orders module (Lambda + API Gateway) via Terraform
+#   4. the S3 bucket holding the orders data
 
 set -e
+
+export AGENTCORE_SUPPRESS_RECOMMENDATION=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 CONFIG_FILE="$PROJECT_ROOT/config.json"
 ORDERS_MODULE_DIR="$PROJECT_ROOT/infra/modules/orders"
+MCP_SERVER_DIR="$PROJECT_ROOT/services/mcp-server"
 
 # Load configuration from config.json
 BUCKET_NAME=$(jq -r '.orders.bucket_name' "$CONFIG_FILE")
@@ -20,14 +24,23 @@ echo "Destroying infrastructure..."
 echo "Bucket name: $BUCKET_NAME"
 
 # Confirm before destroying
-read -p "⚠️  This will destroy the orders Lambda and API Gateway, the RAG v0 knowledge base (with its IAM role and S3 bucket), and delete the S3 bucket '$BUCKET_NAME' and all its contents. Continue? (y/n) " -n 1 -r
+read -p "⚠️  This will destroy the MCP server on AgentCore, the orders Lambda and API Gateway, the RAG v0 knowledge base (with its IAM role and S3 bucket), and delete the S3 bucket '$BUCKET_NAME' and all its contents. Continue? (y/n) " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
   echo "Cancelled."
   exit 1
 fi
 
-# Destroy the RAG v0 knowledge base first (KB, IAM role, its S3 bucket).
+# Destroy the MCP server first, since it calls the orders API and the KB.
+# --force because the single prompt above already covers it.
+if [ -f "$MCP_SERVER_DIR/.bedrock_agentcore.yaml" ]; then
+  echo "Destroying MCP server..."
+  (cd "$MCP_SERVER_DIR" && uv run agentcore destroy --force)
+else
+  echo "MCP server not configured, skipping"
+fi
+
+# Destroy the RAG v0 knowledge base (KB, IAM role, its S3 bucket).
 # SKIP_CONFIRM=1 because the single prompt above already covers it.
 echo "Destroying RAG v0 knowledge base..."
 SKIP_CONFIRM=1 "$PROJECT_ROOT/infra/modules/rag_v0/destroy_kb_infra.sh"
