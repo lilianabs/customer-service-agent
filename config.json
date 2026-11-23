@@ -5,5 +5,10 @@
   "orders": {
     "bucket_name": "orders-service-db",
     "data_path": "data/orders/orders.json"
+  },
+  "rag_v0": {
+    "bucket_name": "",
+    "kb_id": "",
+    "data_source_id": ""
   }
 }

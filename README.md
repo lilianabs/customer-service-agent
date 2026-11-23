@@ -35,7 +35,7 @@ From the project root, run:
 ./scripts/create_infra.sh
 ```
 
-This creates the S3 bucket for orders data, uploads the orders data file, deploys the orders module (Lambda + API Gateway) with Terraform, and runs the smoke tests (`scripts/smoke_test_orders.sh`, which can also be run on its own against any base URL). Configuration is read from `config.json`.
+This creates the S3 bucket for orders data, uploads the orders data file, deploys the orders module (Lambda + API Gateway) with Terraform, and runs the smoke tests (`scripts/smoke_test_orders.sh`, which can also be run on its own against any base URL). It then creates the RAG v0 managed Bedrock knowledge base (`infra/modules/rag_v0/create_kb_infra.sh`, which needs a recent AWS CLI v2), saves its ID to `config.json` as `rag_v0.kb_id`, and runs the knowledge base smoke test (`scripts/smoke_test_kb_v0.py`). Configuration is read from `config.json`.
 
 ### Destroy Infrastructure
 
@@ -45,7 +45,24 @@ To remove all created resources:
 ./scripts/destroy_infra.sh
 ```
 
-This destroys the orders module and removes the S3 bucket and all its contents (requires confirmation).
+This destroys the RAG v0 knowledge base (with its IAM role and S3 bucket) and the orders module, and removes the orders S3 bucket and all its contents (requires confirmation).
+
+### RAG v0 knowledge base
+
+The RAG v0 knowledge base is a managed Amazon Bedrock Knowledge Base built with AWS CLI scripts, not Terraform. The scripts in `infra/modules/rag_v0/` are the source of truth for it. They run as part of `create_infra.sh` and `destroy_infra.sh`, and you can also run each step on its own from the project root:
+
+```bash
+# 1. Create the S3 bucket, upload data/knowledge_base/*.md, create the role, KB and data source, and run ingestion
+./infra/modules/rag_v0/create_kb_infra.sh
+
+# 2. Smoke test: KB status, ingestion status, and the 18-question retrieval eval (exit 0 = pass)
+uv run python scripts/smoke_test_kb_v0.py
+
+# 3. Destroy the KB, its IAM role and its S3 bucket (asks for confirmation)
+./infra/modules/rag_v0/destroy_kb_infra.sh
+```
+
+The create script saves the bucket name, KB ID and data source ID to the `rag_v0` section of `config.json`. Re-running it reuses those values. The destroy script clears them. The create script needs AWS CLI v2 with the `bedrock-agent` commands.
 
 See [infra/created_resources.md](infra/created_resources.md) for a list of resources.
 

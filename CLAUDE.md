@@ -70,6 +70,7 @@ Root in `infra/`, organized by module:
 | `orders` | Lambda, API Gateway, S3 bucket, IAM | AWS |
 | `rag` (v1, v2) | OpenSearch or Bedrock Knowledge Base, S3, IAM | AWS |
 | `agents` | Bedrock AgentCore runtime, IAM | AWS |
+| `rag_v0` (AWS CLI scripts, not Terraform) | Managed Bedrock Knowledge Base, S3 bucket, IAM role | AWS |
 
 - Remote state stored in S3
 - `RAG_VARIANT` environment variable set by Terraform for the deployed RAG service
@@ -84,6 +85,17 @@ terraform apply
 terraform output  # Reads endpoints for frontend and eval scripts
 terraform destroy # Removes all resources; use scripts/destroy_all to wrap
 ```
+
+### RAG v0 knowledge base (AWS CLI scripts)
+The v0 managed Bedrock KB is created by scripts in `infra/modules/rag_v0/`, not Terraform. From the project root:
+```bash
+./infra/modules/rag_v0/create_kb_infra.sh    # S3 bucket + upload, IAM role, managed KB, data source, ingestion
+uv run python scripts/smoke_test_kb_v0.py    # KB status, ingestion status, 18-question retrieval eval; exit 0 = pass
+./infra/modules/rag_v0/destroy_kb_infra.sh   # removes KB, IAM role and S3 bucket (asks for confirmation)
+```
+- `scripts/create_infra.sh` and `scripts/destroy_infra.sh` run these steps with the orders stack.
+- State lives in the `rag_v0` section of `config.json` (`bucket_name`, `kb_id`, `data_source_id`). Create writes it, destroy clears it.
+- Requires AWS CLI v2 with `bedrock-agent` commands.
 
 ## Key Development Patterns
 

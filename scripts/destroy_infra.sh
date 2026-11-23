@@ -1,7 +1,8 @@
 #!/bin/bash
-# Destroy infrastructure resources for the orders service:
-#   1. the orders module (Lambda + API Gateway) via Terraform
-#   2. the S3 bucket holding the orders data
+# Destroy infrastructure resources for the RAG v0 knowledge base and the orders service:
+#   1. the RAG v0 knowledge base (KB, IAM role, S3 bucket)
+#   2. the orders module (Lambda + API Gateway) via Terraform
+#   3. the S3 bucket holding the orders data
 
 set -e
 
@@ -19,14 +20,19 @@ echo "Destroying infrastructure..."
 echo "Bucket name: $BUCKET_NAME"
 
 # Confirm before destroying
-read -p "⚠️  This will destroy the orders Lambda and API Gateway, and delete the S3 bucket '$BUCKET_NAME' and all its contents. Continue? (y/n) " -n 1 -r
+read -p "⚠️  This will destroy the orders Lambda and API Gateway, the RAG v0 knowledge base (with its IAM role and S3 bucket), and delete the S3 bucket '$BUCKET_NAME' and all its contents. Continue? (y/n) " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
   echo "Cancelled."
   exit 1
 fi
 
-# Destroy the orders module (Lambda + API Gateway) first, while the bucket
+# Destroy the RAG v0 knowledge base first (KB, IAM role, its S3 bucket).
+# SKIP_CONFIRM=1 because the single prompt above already covers it.
+echo "Destroying RAG v0 knowledge base..."
+SKIP_CONFIRM=1 "$PROJECT_ROOT/infra/modules/rag_v0/destroy_kb_infra.sh"
+
+# Destroy the orders module (Lambda + API Gateway) while the orders bucket
 # it reads from still exists. The same -var values as create_infra.sh are
 # passed so the IAM policy and variables resolve identically.
 echo "Destroying orders module..."
