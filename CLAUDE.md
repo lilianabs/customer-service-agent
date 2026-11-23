@@ -48,7 +48,7 @@ Exposes one retrieval interface with two interchangeable backends, selected by `
 | `v1` | OpenSearch | Full control over chunking, embedding, ranking; higher operational cost |
 | `v2` | Bedrock Knowledge Bases | Managed ingestion; limited control over retrieval |
 
-Both variants implement the same `Retriever` interface and read source documents from `data/knowledge_base/`. The variant is selected at deployment time (Terraform sets it) and can be overridden per evaluation run.
+Both variants implement the same `Retriever` interface and read source documents from `data/knowledge-base/`. The variant is selected at deployment time (Terraform sets it) and can be overridden per evaluation run.
 
 ### 3. **Orders Service** (`services/orders/`)
 AWS Lambda + API Gateway serving order status and inventory from S3 static files. Provides endpoints:
@@ -132,7 +132,7 @@ Values are set per agent in `services/agents/` and enforced at invocation time.
 ## Data and Evaluation
 
 ### Knowledge Base
-Source documents in `data/knowledge_base/`:
+Source documents in `data/knowledge-base/`:
 - Product specs, FAQs, usage guides
 - Ingested by both RAG variants
 - Updated as needed; ingest pipeline re-indexes automatically

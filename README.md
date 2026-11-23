@@ -52,7 +52,7 @@ This destroys the RAG v0 knowledge base (with its IAM role and S3 bucket) and th
 The RAG v0 knowledge base is a managed Amazon Bedrock Knowledge Base built with AWS CLI scripts, not Terraform. The scripts in `infra/modules/rag_v0/` are the source of truth for it. They run as part of `create_infra.sh` and `destroy_infra.sh`, and you can also run each step on its own from the project root:
 
 ```bash
-# 1. Create the S3 bucket, upload data/knowledge_base/*.md, create the role, KB and data source, and run ingestion
+# 1. Create the S3 bucket, upload data/knowledge-base/*.md, create the role, KB and data source, and run ingestion
 ./infra/modules/rag_v0/create_kb_infra.sh
 
 # 2. Smoke test: KB status, ingestion status, and the 18-question retrieval eval (exit 0 = pass)

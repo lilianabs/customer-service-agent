@@ -19,7 +19,7 @@ See [README.md](../README.md#infrastructure) for instructions on creating and de
 
 Created by `infra/modules/rag_v0/create_kb_infra.sh` (called from `scripts/create_infra.sh`) and removed by `destroy_kb_infra.sh`. Names and IDs are saved in the `rag_v0` section of `config.json`.
 
-- **S3 Bucket**: `product-information-kb-data-<random suffix>` (public access blocked) — stores the Markdown files from `data/knowledge_base/` under `knowledge_base/`
+- **S3 Bucket**: `product-information-kb-data-<random suffix>` (public access blocked) — stores the Markdown files from `data/knowledge-base/` under `knowledge_base/`
 - **IAM role**: `rag-v0-kb-role` (trusted by `bedrock.amazonaws.com`, read access to the bucket above)
 - **Bedrock Knowledge Base**: `rag-v0` — managed, out-of-the-box settings (Bedrock manages the vector store and embeddings); ID saved as `rag_v0.kb_id`
 - **Data source**: `product-information` — the S3 bucket above; ID saved as `rag_v0.data_source_id`
