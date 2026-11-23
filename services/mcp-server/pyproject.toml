@@ -1,0 +1,9 @@
+[project]
+name = "mcp-server"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "bedrock-agentcore>=1.26.1",
+    "bedrock-agentcore-starter-toolkit>=0.3.14",
+    "mcp>=1.28,<2",
+]

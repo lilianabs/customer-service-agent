@@ -55,6 +55,7 @@ Each day ends with an exit check; do not start the next day until it passes, or 
 
 ### Day 4: MCP Server and Evals
 
+- [ ] Write ADR for MCP pserver.
 - [ ] Create MCP server for Product Information component and orders service.
 - [ ] Create Evals data set for Product Information component using ragas.
 - [ ] Create Evals data set for Refunds agent.
