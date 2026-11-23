@@ -1539,6 +1539,8 @@ source = { virtual = "services/mcp-server" }
 dependencies = [
     { name = "bedrock-agentcore" },
     { name = "bedrock-agentcore-starter-toolkit" },
+    { name = "boto3" },
+    { name = "httpx" },
     { name = "mcp" },
 ]
 
@@ -1546,6 +1548,8 @@ dependencies = [
 requires-dist = [
     { name = "bedrock-agentcore", specifier = ">=1.26.1" },
     { name = "bedrock-agentcore-starter-toolkit", specifier = ">=0.3.14" },
+    { name = "boto3", specifier = ">=1.44.4" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "mcp", specifier = ">=1.28,<2" },
 ]
 
