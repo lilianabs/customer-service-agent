@@ -51,7 +51,7 @@ Each day ends with an exit check; do not start the next day until it passes, or 
 ### Day 2-3: Knowledge Base v0
 
 - [✓] Experiment with the managed Amazon Bedrock Knowledge Base to get a baseline and retrieval metrics for v0.
-- [ ] Deploy KB (v0) to AWS.
+- [✓] Deploy KB (v0) to AWS.
 
 ### Day 4: MCP Server and Evals
 
