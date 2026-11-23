@@ -2,7 +2,7 @@
 # Create the RAG v0 knowledge base (managed Amazon Bedrock Knowledge Base with
 # out-of-the-box settings), as explored in notebooks/03_rag_v0_exploration.ipynb:
 #   1. a private S3 bucket holding the knowledge base Markdown files
-#   2. the files from data/knowledge_base/ uploaded to it
+#   2. the files from data/knowledge-base/ uploaded to it
 #   3. an IAM role Bedrock uses to read the bucket
 #   4. the managed knowledge base, its S3 data source and a first ingestion job
 #
@@ -14,7 +14,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$(dirname "$(dirname "$SCRIPT_DIR")")")"
 CONFIG_FILE="$PROJECT_ROOT/config.json"
-KB_DIR="$PROJECT_ROOT/data/knowledge_base"
+KB_DIR="$PROJECT_ROOT/data/knowledge-base"
 
 BUCKET_PREFIX="product-information-kb-data"
 KB_PREFIX="knowledge_base/"
