@@ -101,7 +101,7 @@ uv run python scripts/smoke_test_kb_v0.py    # KB status, ingestion status, 18-q
 ## Key Development Patterns
 
 ### Testing RAG retrieval
-The RAG service has an interface contract. To test a variant:
+The RAG service has an interface contract (planned for Day 8; `services/rag/core` does not exist yet). To test a variant:
 ```python
 from services.rag.core import Retriever
 # RAG_VARIANT env var selects v1 or v2 implementation
@@ -111,7 +111,7 @@ results = retriever.retrieve("question here")
 ```
 
 ### Testing agents locally
-Agents are LangGraph graphs that invoke tool functions. To test:
+Agents are LangGraph graphs that invoke tool functions (built on Day 5; module names may change). To test:
 ```python
 from services.agents.intent_router import graph as router_graph
 from services.agents.product_qa import graph as qa_graph
@@ -139,7 +139,7 @@ Source documents in `data/knowledge-base/`:
 - Updated as needed; ingest pipeline re-indexes automatically
 
 ### Golden Evaluation Set
-Not yet written; due on Day 3 of the implementation plan. Will live in `data/eval/` with questions, expected answers, and expected source documents.
+Not yet written; due on Day 6 of the implementation plan. Will live in `data/eval/` with questions, expected answers, and expected source documents.
 
 ### Evaluation Results
 - RAG evaluation results (retrieval quality, answer quality, latency, cost): `evals/results/rag/`
@@ -160,7 +160,7 @@ Not yet written; due on Day 3 of the implementation plan. Will live in `data/eva
 
 ## Important Notes
 
-- **This project is in early stages**: Day 1 is mostly done (orders service scaffold, repo setup). Agents, RAG variants, and evaluations are not yet built.
+- **Current status (as of Nov 25, 2026)**: Days 1–4 of the plan are done: repo and Terraform setup, orders service deployed, managed KB v0 deployed, and the MCP server for product information and orders. Not yet built: agents (Day 5), golden set and ragas evals plus guardrails (Day 6), system test and web chat UI connection (Day 7), and the RAG `Retriever` interface with v1 and v2 variants (Day 8 onward).
 - **Development is time-boxed**: 7-day plan in [implementation_plan.md](docs/implementation_plan.md) with clear exit checks and a cut line for scope if days slip.
 - **One environment only**: No dev/prod split.
 - **Model routing and the monitoring dashboard are out of scope** for this phase (see Roadmap in architecture.md).
