@@ -53,10 +53,14 @@ Each day ends with an exit check; do not start the next day until it passes, or 
 - [✓] Experiment with the managed Amazon Bedrock Knowledge Base to get a baseline and retrieval metrics for v0.
 - [✓] Deploy KB (v0) to AWS.
 
+**Exit check:** `uv run python scripts/smoke_test_kb_v0.py` exits 0 (KB and ingestion status are ready, and the retrieval eval passes).
+
 ### Day 4: MCP Server
 
 - [✓] Write ADR for MCP pserver.
 - [✓] Create MCP server for Product Information component and orders service.
+
+**Exit check:** the MCP server is deployed to AgentCore Runtime, `scripts/smoke_test_mcp.sh` passes, and its product information and orders tools return data.
 
 ### Day 5: Agents, deployment and tracing
 
@@ -66,9 +70,9 @@ Each day ends with an exit check; do not start the next day until it passes, or 
 - [ ] Add a first version of long-term memory if time allows.
 - [ ] Deploy the `agents` module on AgentCore.
 - [ ] Add LangSmith tracing.
-- [ ] Enable CloudWatch Transaction Search and OpenTelemetry tracing.
+- [ ] Enable CloudWatch Transaction Search.
 
-**Exit check:** scripted conversations for product questions and refunds work on the deployed agents, and their traces show in LangSmith and CloudWatch.
+**Exit check:** the intent router hands a product question to the product questions component and a refund request to the refunds agent on the deployed agents, each gets a correct reply, and their traces show in LangSmith and CloudWatch.
 
 ### Day 6: Evals, guardrails and docs
 
@@ -100,20 +104,19 @@ Each component gets a one-page brief with its implementation details, written in
 | Infrastructure                 | Day 1      | Terraform layout, state, naming, IAM, destroy script                     |
 | Orders service                 | Day 1      | Endpoints, data files in S3, request and response shapes                 |
 | Product information KB         | Day 2      | `Retriever` interface, ingestion, the v0 setup (v1 and v2 briefs on days 8 and 9) |
-| Agents                         | Day 5      | Graphs, tools, handoffs, escalation, memory, guardrails                  |
+| MCP server                     | Day 4      | Two tool groups (product information and orders), tool schemas, how the clients call them |
+| Agents                         | Day 5      | Graphs, tools, handoffs, escalation, memory, input and output guardrails (PII, prompt injection, response validation), LangSmith and CloudWatch tracing |
 | Evaluations                    | Day 6      | Golden set format, metrics, runner, results layout                       |
-| Product questions approaches   | Day 11     | Simple RAG workflow and agentic RAG, tools, how they are compared        |
+| Product questions approaches   | Day 7     | Simple RAG workflow and agentic RAG, tools, how they are compared        |
 
 ## Risks and cut line
 
 If a day slips by more than 2 hours, cut from the top of this list first.
 
-| Priority to cut | What to drop                      | Effect                                                 |
-| --------------- | --------------------------------- | ------------------------------------------------------ |
-| 1               | Long-term memory (day 5)          | Short-term memory only; long-term stays a roadmap item |
-| 2               | Other system metrics (day 7)      | Only cost per conversation, p50 and p95 latency        |
-| 3               | Different model per agent (day 5) | One model for all agents                               |
-| 4               | RAGAS in CI/CD (day 10)           | RAGAS runs manually until later                        |
+| Priority to cut | What to drop                                              | Effect                                                                 |
+| --------------- | --------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 1               | Product questions v1, agentic RAG (day 11)                | Only the simple RAG workflow is built; no approach comparison (day 12) |
+| 2               | KB variants v1 and v2 (days 8-9)                          | Only the v0 KB is built; no KB comparison (day 10), and the approach comparison (day 12) runs on v0 only |
 
 | Risk                                                    | Mitigation                                                                              |
 | ------------------------------------------------------- | --------------------------------------------------------------------------------------- |

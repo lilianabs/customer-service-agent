@@ -1,6 +1,6 @@
 # Customer Service Agent: Architecture
 
-Nov 11, 2026 · Last updated Nov 20, 2026 · @Liliana Badillo
+Nov 11, 2026 · Last updated Nov 25, 2026 · @Liliana Badillo
 
 ## Overview and goals
 
@@ -9,7 +9,7 @@ A customer service agent for a hair care products company, deployed entirely on 
 1. **Build the agents:** a working customer service agent team that detects intent, answers product questions with RAG, and handles refund requests with escalation to a human.
 2. **Compare the product information component:** measure the two candidate product questions approaches, v0 (simple RAG workflow) and v1 (agentic RAG), each run against the three Knowledge Base variants: v0 (managed Bedrock Knowledge Base), v1 (OpenSearch) and v2 (self-managed Bedrock Knowledge Base with S3 Vectors). Compare them on retrieval quality, answer quality, latency and cost, and pick the best combination.
 
-3. **Measure the whole system:** track cost per conversation, p50 and p95 latency, and other metrics still to be decided.
+3. **Measure the whole system:** track cost per conversation, p50 and p95 latency, and tokens.
 
 **What it does**
 
@@ -34,36 +34,42 @@ A customer service agent for a hair care products company, deployed entirely on 
 | Agent orchestration | LangGraph |
 | Agent runtime | AgentCore |
 | LLMs (response generation) | Amazon Bedrock |
+| Guardrails (security) | Amazon Bedrock Guardrails |
 | RAG regression testing | RAGAS |
 | Product information KB variants | Amazon Bedrock Knowledge Bases (managed, v0), Amazon OpenSearch Service (v1), Amazon Bedrock Knowledge Bases with Amazon S3 Vectors (self-managed, v2) |
 | Embeddings | Amazon Titan Text Embeddings V2 |
 | Orders service | AWS Lambda, API Gateway, S3 |
-| Observability | Amazon CloudWatch, OpenTelemetry |
+| Observability | Amazon CloudWatch, OpenTelemetry, LangSmith |
 | Infrastructure | Terraform |
 
 ## System diagram and components
 
-The local UI talks to the intent router agent, which hands off to the product questions component or the refunds agent. The product questions component is one of two candidate approaches (v0: RAG workflow, v1: agentic RAG), to be chosen from the experiments. It retrieves from the product information KB, which has three interchangeable variants (v0, v1, v2), and generates the answer. Both agents reach the product information KB and the orders service through an MCP server, which exposes them as tools. The refunds agent also escalates cases to a human reviewer. Amazon Bedrock provides the LLMs that generate the agents' responses. Amazon CloudWatch collects logs, metrics and traces from AgentCore and the Orders service, and traces the LLM calls to Amazon Bedrock.
+The local UI sends each user message through an input guardrail, implemented with Amazon Bedrock Guardrails, which checks for PII and prompt injection before it reaches the intent router agent. The router hands off to the product questions component or the refunds agent. Their replies pass through an output guardrail, also implemented with Amazon Bedrock Guardrails, which validates the response before it reaches the UI. The product questions component is one of two candidate approaches (v0: RAG workflow, v1: agentic RAG), to be chosen from the experiments. It retrieves from the product information KB, which has three interchangeable variants (v0, v1, v2), and generates the answer. The MCP server has two groups of tools: product information tools, which the product questions component uses to reach the product information KB, and orders tools, which the refunds agent uses to reach the orders service. The refunds agent also escalates cases to a human reviewer. Amazon Bedrock provides the LLMs that generate the agents' responses. Amazon CloudWatch collects logs, metrics and traces from AgentCore and the Orders service, and traces the LLM calls to Amazon Bedrock.
 
 ```mermaid
 flowchart TD
-    UI[Web chat UI, local] --> Router
     subgraph AgentCore[Amazon Bedrock AgentCore]
+        InGuard["Amazon Bedrock Guardrails: PII and prompt injection"] --> Router
         Router[Intent router] --> Product
         Router --> Refunds[Refunds]
         subgraph Product[Product questions: candidate approaches]
             P0[v0: RAG workflow]
             P1[v1: Agentic RAG]
         end
+        Product -->|answer| OutGuard["Amazon Bedrock Guardrails: response validation"]
+        Refunds -->|reply| OutGuard
     end
-    Product -->|tool calls| Tools
-    Refunds -->|tool calls| Tools
+    UI[Web chat UI, local] --> InGuard
+    Product -->|tool calls| ProductTools
+    Refunds -->|tool calls| OrderTools
     Refunds -->|escalate| Human[Human reviewer]
+    OutGuard -->|validated response| UI
     subgraph MCP[MCP server]
-        Tools[Tools: product information, order lookups]
+        ProductTools[Product information tools]
+        OrderTools[Orders tools]
     end
-    Tools -->|retrieve| KB
-    Tools -->|order data, return policy| Orders
+    ProductTools -->|retrieve| KB
+    OrderTools -->|order data, return policy| Orders
     subgraph KB[Product information Knowledge Base]
         V0[v0: Managed Bedrock Knowledge Base]
         V1[v1: OpenSearch]
@@ -93,9 +99,9 @@ Agents never call AWS services directly. They go through thin clients (`rag_clie
 
 The refunds agent does not issue refunds. It gathers the order details, checks eligibility against the policy and hands a case summary to a human for approval.
 
-**Memory:** the agents use short-term memory within a conversation and long-term memory across conversations. The design of each is still to be decided.
+**Memory:** short-term memory within a conversation is the message list in the graph state, saved between turns with the AgentCore Memory service (see [ADR: Agent graph architecture](adr/agentic_graph.md)). Long-term memory across conversations is not decided yet; it is a first version only if time allows.
 
-**Models:** each agent can run on a different model. Which model each agent uses is still to be decided.
+**Models:** each agent runs on its own model. The intent router uses Amazon Nova Lite. The product questions component and the refunds agent use Claude Sonnet 5.5 (see [ADR: Agent graph architecture](adr/agentic_graph.md)).
 
 ### Product questions: candidate approaches
 
@@ -223,14 +229,16 @@ Guardrails limit what the system can cost and do. New ones, such as security gua
 | Max request length | Cost | How long a user request can be |
 | Max tokens | Cost | How many tokens the LLM can generate per call |
 | `recursion_limit` | Cost | How many steps an agent graph can take in one run, which stops loops |
+| PII and prompt injection (input), Amazon Bedrock Guardrails | Security | User messages that contain personal data or prompt injection attempts, before they reach the agents |
+| Response validation (output), Amazon Bedrock Guardrails | Security | Agent replies before they reach the user |
 
 ## Observability
 
-Everything is observed in Amazon CloudWatch. AgentCore already provides built-in metrics, logs and traces there, and LangGraph can send OpenTelemetry traces through the AWS Distro for OpenTelemetry ([AWS docs](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/AgentCore-GettingStarted.html)). Enable CloudWatch Transaction Search once to see traces. Every LLM call the agents make to Amazon Bedrock is traced in CloudWatch.
+Everything is observed in Amazon CloudWatch, and the agents' traces are also sent to LangSmith. AgentCore already provides built-in metrics, logs and traces there, and LangGraph can send OpenTelemetry traces through the AWS Distro for OpenTelemetry ([AWS docs](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/AgentCore-GettingStarted.html)). Enable CloudWatch Transaction Search once to see traces. Every LLM call the agents make to Amazon Bedrock is traced in CloudWatch.
 
 | Layer | What to capture | How |
 | --- | --- | --- |
-| Agents and LLM calls to Amazon Bedrock | One trace per conversation: graph steps, LLM calls, tool calls, token counts | AgentCore observability plus OpenTelemetry tracing in LangGraph, viewed in CloudWatch GenAI observability |
+| Agents and LLM calls to Amazon Bedrock | One trace per conversation: graph steps, LLM calls, tool calls, token counts | AgentCore observability plus OpenTelemetry tracing in LangGraph, viewed in CloudWatch GenAI observability and in LangSmith |
 | MCP server | Tool calls, errors, duration per tool | Structured logs and CloudWatch metrics, per tool |
 | Orders service | Requests, errors, duration | Lambda and API Gateway logs and metrics |
 | Product information KB | Retrieval latency and errors, per variant | Structured logs and custom metrics tagged with the variant |
@@ -267,6 +275,12 @@ Changes to this document and the decisions behind them, newest first. Add a row 
 
 | Date | Change | Why / where it was decided |
 | --- | --- | --- |
+| 2026-11-25 | Agents section now records the short-term memory design (graph state, AgentCore Memory checkpointer), and the models per agent (Amazon Nova Lite for the router, Claude Sonnet 5.5 for product questions and refunds). Long-term memory is still open | Decided in [ADR: Agent graph architecture](adr/agentic_graph.md) |
+| 2026-11-25 | The input and output security guardrails are implemented with Amazon Bedrock Guardrails. Added it to the tech stack, the diagram labels, the system description and the Guardrails table | Decided in [ADR: Agent graph architecture](adr/agentic_graph.md) |
+| 2026-11-25 | Moved the input and output guardrails inside the AgentCore subgraph in the diagram, so they are graph nodes. The agent graph design is recorded in the new ADR | Decided in [ADR: Agent graph architecture](adr/agentic_graph.md) |
+| 2026-11-25 | Added LangSmith as an agent tracing tool, alongside CloudWatch. Added it to the tech stack, the observability intro and the agents and LLM calls row | LangSmith is in scope for the Day 5 plan (agent tracing, with CloudWatch) |
+| 2026-11-25 | Added two guardrail components to the system diagram: an input guardrail between the web chat UI and the intent router (PII and prompt injection), and an output guardrail between the agents and the web chat UI (response validation). Both agents' replies now pass through the output guardrail before reaching the UI | Added to the diagram as security guardrails, and as rows in the Guardrails table. The Roadmap security item is not yet updated |
+| 2026-11-25 | The MCP server now has two components: product information tools (used by the product questions component, to reach the KB) and orders tools (used by the refunds agent, to reach the orders service). Updated the diagram and the system description to match. Added arrows from the product questions component and the refunds agent back to the web chat UI, so the diagram shows the response to the user | The MCP server needs separate tool groups for product information and orders; the diagram should show where responses go |
 | 2026-11-20 | Added tool calls, errors and duration per tool for the MCP server to the observability table, and linked the MCP server to CloudWatch in the diagram. Added an MCP server between the agents and the services. It exposes the product information KB and the orders service as tools, and the agents reach both through it. Updated the diagram, system description and agents section to match | Added to the diagram; the Day 4 plan in the implementation plan builds it |
 | 2026-11-20 | Product questions is no longer a fixed agent. It is a component with two candidate approaches (v0 simple RAG workflow, v1 agentic RAG), and the experiments choose which one is kept. Updated the goals, system description, agents section, diagram subgraph, KB section, Orders service callers and scenarios to match | Which approach to keep depends on the experiment results, so it can't be fixed in the design yet |
 | 2026-11-20 | The RAG service is now the product information Knowledge Base, with three variants: v0 (managed Bedrock Knowledge Base, default settings), v1 (OpenSearch) and v2 (self-managed Bedrock Knowledge Base + S3 Vectors). The controlled experiment still compares only v1 and v2. CloudWatch now also traces the LLM calls to Amazon Bedrock. Updated the goals, tech stack, component description, KB section, evaluation plans, Terraform and observability to match the diagram | Changes made to the system diagram |
