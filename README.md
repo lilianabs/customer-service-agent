@@ -66,6 +66,26 @@ The create script saves the bucket name, KB ID and data source ID to the `rag_v0
 
 See [infra/created_resources.md](infra/created_resources.md) for a list of resources.
 
+## Tests
+
+Tests live in `tests/` and run with pytest. The settings for pytest are in `pyproject.toml`. The agents code needs its workspace packages, so sync them first:
+
+```bash
+uv sync --all-packages
+
+uv run pytest                    # all tests; live tests call Bedrock and need AWS credentials
+uv run pytest -m "not live"      # routing logic only, no AWS calls
+```
+
+Tests that call an AWS service are marked `@pytest.mark.live`. The agents read their settings from `services/agents/config.json`, which holds the router model and the graph limits.
+
+Type check and lint the agents code:
+
+```bash
+uv run pyright --pythonpath "$(uv run which python)" services/agents
+uv run ruff check services/agents tests
+```
+
 ## Frontend
 
 To run the static site: 

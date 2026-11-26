@@ -19,8 +19,13 @@ Run locally (serves POST /invocations on port 8080, like AgentCore Runtime):
          -d '{"prompt": "I want a refund for order 1234"}'
 
 Configuration: services/agents/config.json, a copy of the settings this folder
-needs, so the folder can be deployed on its own. The AWS_REGION environment
-variable overrides the region in that file.
+needs, so the folder can be deployed on its own. The AWS_REGION, MCP_RUNTIME_ARN
+and MCP_URL environment variables override the file.
+
+Product questions use the v0 approach (retrieve, then generate). Retrieval goes
+through rag_client.py, which calls the MCP server's search_product_information
+tool. Set mcp.runtime_arn (written by scripts/create_infra.sh) for the deployed
+server, or mcp.url / MCP_URL for a local one.
 """
 
 import json
@@ -39,6 +44,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
+from rag_client import Passage, RagClient, RagClientError
 from typing_extensions import TypedDict
 
 logger = logging.getLogger("agents")
@@ -56,18 +62,32 @@ class Settings:
     router_max_tokens: int
     router_history_messages: int  # recent messages the router sees, for follow-ups
     recursion_limit: int
+    product_model_id: str
+    product_max_tokens: int
+    product_top_k: int  # passages retrieved per product question
+    mcp_runtime_arn: str  # MCP server on AgentCore Runtime (SigV4)
+    mcp_url: str  # plain MCP URL, e.g. a local server; wins over the ARN
 
 
 def load_settings(path: Path = CONFIG_PATH) -> Settings:
-    """Read the agent settings from config.json. AWS_REGION overrides the region."""
+    """Read the agent settings from config.json.
+
+    AWS_REGION, MCP_RUNTIME_ARN and MCP_URL environment variables override the file.
+    """
     data = json.loads(path.read_text())
     agents = data["agents"]
+    mcp = data.get("mcp", {})
     return Settings(
         region=os.environ.get("AWS_REGION") or str(data["aws"]["region"]),
         router_model_id=agents["router_model_id"],
         router_max_tokens=agents["router_max_tokens"],
         router_history_messages=agents["router_history_messages"],
         recursion_limit=agents["recursion_limit"],
+        product_model_id=agents["product_model_id"],
+        product_max_tokens=agents["product_max_tokens"],
+        product_top_k=agents["product_top_k"],
+        mcp_runtime_arn=os.environ.get("MCP_RUNTIME_ARN") or str(mcp.get("runtime_arn", "")),
+        mcp_url=os.environ.get("MCP_URL") or str(mcp.get("url", "")),
     )
 
 
@@ -100,6 +120,27 @@ status, delivery, or the status of a refund.
 Use earlier messages only to understand follow-ups. Classify the latest user message.
 Return "other" only when the message is neither product nor refund."""
 
+PRODUCT_SYSTEM_PROMPT = """You answer product questions for the customer service \
+assistant of AnyCompany Hair Care, a hair care products company.
+
+Answer only from the product information passages below. If they do not cover the \
+question, say that you don't have that information and suggest contacting customer \
+service. Do not guess or add facts that are not in the passages.
+
+Answer only the product part of the customer's latest message. If it also asks about \
+an order, a return or a refund, leave that part out: another assistant answers it.
+
+Keep the answer short and friendly, in plain text. Do not list sources; they are \
+added after your answer.
+
+Product information passages:
+{passages}"""
+
+PRODUCT_FALLBACK_REPLY = (
+    "I couldn't find that in our product information right now. Please try "
+    "rephrasing your question, or contact our customer service team."
+)
+
 
 # --- State -------------------------------------------------------------------
 
@@ -107,6 +148,7 @@ Return "other" only when the message is neither product nor refund."""
 class AgentState(TypedDict):
     messages: Annotated[list[AnyMessage], operator.add]  # full history, append mode
     pending_intents: list[str]  # set by the router, consumed by the branches in order
+    product_sources: list[str]  # source file names the product answer used this turn
 
 
 class RouterDecision(BaseModel):
@@ -161,10 +203,94 @@ def classify_intent(state: AgentState) -> dict:
     return {"pending_intents": intents}
 
 
+_product_llm: Runnable | None = None
+_rag: RagClient | None = None
+
+
+def _product_model() -> Runnable:
+    """Return the product questions model, creating it on first use."""
+    global _product_llm
+    if _product_llm is None:
+        _product_llm = ChatBedrockConverse(
+            model=SETTINGS.product_model_id,
+            region_name=SETTINGS.region,
+            temperature=0,
+            max_tokens=SETTINGS.product_max_tokens,
+        )
+    return _product_llm
+
+
+def _rag_client() -> RagClient:
+    """Return the knowledge base client, creating it on first use."""
+    global _rag
+    if _rag is None:
+        _rag = RagClient(
+            region=SETTINGS.region,
+            runtime_arn=SETTINGS.mcp_runtime_arn,
+            url=SETTINGS.mcp_url,
+        )
+    return _rag
+
+
+def source_name(source: str) -> str:
+    """File name of a knowledge base source URI (s3://bucket/knowledge_base/x.md -> x.md)."""
+    return source.rstrip("/").rsplit("/", 1)[-1]
+
+
+def format_passages(passages: Sequence[Passage]) -> str:
+    """Numbered passage block for the prompt, each with its source file name."""
+    return "\n\n".join(
+        f"[{i}] (source: {source_name(p['source'])})\n{p['passage']}"
+        for i, p in enumerate(passages, start=1)
+    )
+
+
+def unique_sources(passages: Sequence[Passage]) -> list[str]:
+    """Source file names in retrieval order, without duplicates."""
+    names: list[str] = []
+    for p in passages:
+        name = source_name(p["source"])
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def latest_user_message(messages: Sequence[AnyMessage]) -> str:
+    for message in reversed(messages):
+        if isinstance(message, HumanMessage):
+            return str(message.content)
+    return ""
+
+
 def product_questions(state: AgentState) -> dict:
-    """Placeholder until the product questions agent (v0 or v1) is built."""
-    reply = AIMessage("[product questions agent not built yet]")
-    return {"messages": [reply], "pending_intents": state["pending_intents"][1:]}
+    """Product questions, v0 RAG workflow: retrieve passages, then answer from them."""
+    remaining = state["pending_intents"][1:]
+    query = latest_user_message(state["messages"])
+
+    try:
+        passages = _rag_client().search(query, SETTINGS.product_top_k)
+    except RagClientError:
+        logger.exception("knowledge base search failed")
+        passages = []
+
+    if not passages:
+        return {
+            "messages": [AIMessage(PRODUCT_FALLBACK_REPLY)],
+            "product_sources": [],
+            "pending_intents": remaining,
+        }
+
+    system = SystemMessage(PRODUCT_SYSTEM_PROMPT.format(passages=format_passages(passages)))
+    history = state["messages"][-SETTINGS.router_history_messages :]
+    answer = _product_model().invoke([system, *history])
+
+    sources = unique_sources(passages)
+    reply = f"{str(answer.content).strip()}\n\nSources: {', '.join(sources)}"
+    return {
+        "messages": [AIMessage(reply)],
+        "product_sources": sources,
+        "pending_intents": remaining,
+    }
 
 
 def refunds(state: AgentState) -> dict:
@@ -230,11 +356,16 @@ def run_turn(prompt: str, thread_id: str) -> dict:
     inputs: AgentState = {
         "messages": [HumanMessage(prompt)],
         "pending_intents": [],
+        "product_sources": [],  # reset, so sources from an earlier turn don't leak
     }
     result = graph.invoke(inputs, config=run_config)
     new_messages = result["messages"][len(previous) + 1 :]
     replies = [m.content for m in new_messages if isinstance(m, AIMessage)]
-    return {"reply": "\n\n".join(str(r) for r in replies), "session_id": thread_id}
+    return {
+        "reply": "\n\n".join(str(r) for r in replies),
+        "sources": result.get("product_sources", []),
+        "session_id": thread_id,
+    }
 
 
 @app.entrypoint

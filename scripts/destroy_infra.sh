@@ -40,6 +40,11 @@ else
   echo "MCP server not configured, skipping"
 fi
 
+# Clear the MCP runtime ARN the agents use, so they don't call a deleted runtime.
+AGENTS_CONFIG_FILE="$PROJECT_ROOT/services/agents/config.json"
+tmp=$(mktemp)
+jq '.mcp.runtime_arn = ""' "$AGENTS_CONFIG_FILE" > "$tmp" && mv "$tmp" "$AGENTS_CONFIG_FILE"
+
 # Destroy the RAG v0 knowledge base (KB, IAM role, its S3 bucket).
 # SKIP_CONFIRM=1 because the single prompt above already covers it.
 echo "Destroying RAG v0 knowledge base..."

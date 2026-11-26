@@ -5,7 +5,9 @@ requires-python = ">=3.13"
 dependencies = [
     "bedrock-agentcore>=1.26.1",
     "boto3>=1.44.4",
+    "httpx>=0.28.1",
     "langchain-aws>=1.0.0",
     "langgraph>=1.0.0",
+    "mcp>=1.28,<2",
     "pydantic>=2.0",
 ]

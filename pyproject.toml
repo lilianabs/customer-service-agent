@@ -7,6 +7,9 @@ dependencies = [
 ]
 
 [dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
 notebook = [
     "boto3>=1.44.4",
     "ipykernel>=7.4.0",
@@ -23,4 +26,14 @@ notebook = [
 members = [
     "services/mcp-server",
     "services/agents",
+]
+
+[tool.pyright]
+extraPaths = ["services/agents"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["services/agents"]
+markers = [
+    "live: calls Amazon Bedrock (needs AWS credentials); deselect with -m 'not live'",
 ]

@@ -6,6 +6,13 @@
     "router_model_id": "amazon.nova-micro-v1:0",
     "router_max_tokens": 200,
     "router_history_messages": 6,
-    "recursion_limit": 10
+    "recursion_limit": 10,
+    "product_model_id": "us.anthropic.claude-sonnet-4-6",
+    "product_max_tokens": 800,
+    "product_top_k": 5
+  },
+  "mcp": {
+    "runtime_arn": "",
+    "url": ""
   }
 }

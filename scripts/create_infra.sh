@@ -120,6 +120,13 @@ aws iam put-role-policy \
   --policy-name mcp-server-kb-retrieve \
   --policy-document "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"bedrock:Retrieve\",\"Resource\":\"arn:aws:bedrock:$AWS_REGION:$ACCOUNT_ID:knowledge-base/$KB_ID\"}]}"
 
+# Save the MCP runtime ARN for the agents (rag_client reads mcp.runtime_arn).
+MCP_RUNTIME_ARN=$(uv run python -c "import yaml; c = yaml.safe_load(open('.bedrock_agentcore.yaml')); print(c['agents'][c['default_agent']]['bedrock_agentcore']['agent_arn'] or '')")
+AGENTS_CONFIG_FILE="$PROJECT_ROOT/services/agents/config.json"
+tmp=$(mktemp)
+jq --arg arn "$MCP_RUNTIME_ARN" '.mcp.runtime_arn = $arn' "$AGENTS_CONFIG_FILE" > "$tmp" && mv "$tmp" "$AGENTS_CONFIG_FILE"
+echo "MCP runtime ARN: $MCP_RUNTIME_ARN (saved to services/agents/config.json as mcp.runtime_arn)"
+
 cd "$PROJECT_ROOT"
 
 # Smoke test the deployed MCP server

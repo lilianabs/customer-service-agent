@@ -28,6 +28,27 @@ cd frontend && uv run python -m http.server 5500
 # Then open http://localhost:5500/ in a browser
 ```
 
+### Running tests
+
+Tests live in `tests/` and use pytest (configured in the root `pyproject.toml`). The agents code needs the workspace packages, so sync them first:
+
+```bash
+uv sync --all-packages             # installs the services/agents dependencies too
+
+uv run pytest                      # all tests (live tests call Bedrock, need AWS credentials)
+uv run pytest -m "not live"        # routing logic only, no AWS calls
+uv run pytest tests/test_agent_router.py::test_normalize_intents   # one test
+```
+
+Tests marked `live` are tagged with `@pytest.mark.live`. Add that marker to any test that calls Bedrock or another AWS service, so `-m "not live"` stays free of AWS calls.
+
+Type checks and lint for the agents code:
+
+```bash
+uv run pyright --pythonpath "$(uv run which python)" services/agents   # type check
+uv run ruff check services/agents tests                                 # lint
+```
+
 ## High-Level Architecture
 
 The system has four main components:
