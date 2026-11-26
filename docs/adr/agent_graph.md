@@ -77,11 +77,11 @@ The refunds agent's reply explains the policy result: whether the order is eligi
 
 Each graph node uses its own model.
 
-| Node | Model |
-| --- | --- |
-| Intent router | Amazon Nova Lite |
-| Product questions (v0 or v1) | Claude Sonnet 5.5 |
-| Refunds agent | Claude Sonnet 5.5 |
+| Node | Model | Model ID |
+| --- | --- | --- |
+| Intent router | Amazon Nova Micro | `amazon.nova-micro-v1:0` |
+| Product questions (v0 or v1) | Claude Sonnet 4.6 | `us.anthropic.claude-sonnet-4-6` |
+| Refunds agent | Claude Sonnet 4.6 | `us.anthropic.claude-sonnet-4-6` |
 
 The `other` branch makes no model call.
 
