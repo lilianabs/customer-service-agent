@@ -64,15 +64,20 @@ Each day ends with an exit check; do not start the next day until it passes, or 
 
 ### Day 5: Agents, deployment and tracing
 
-- [ ] Build the LangGraph graph for the intent router, product questions and refunds agents.
-- [ ] Write `rag_client` for the product information KB, `orders_client` for the refunds agent, the tool wiring for both, and the escalation summary for a human.
-- [ ] Add a first version of short-term memory and choose a model per agent.
+- [✓] Choose a model per agent
+- [✓] Build the intent router node with tests.
+- [✓] Build the product questions node with tests.
+- [ ] Build the refunds node with tests.
+- [ ] Build the out of scope node with tests.
+- [✓] Write `rag_client` for the product information KB.
+- [ ] Write `orders_client` for the refunds agent, wire the tools for both, and write the escalation summary for a human.
+- [ ] Add a first version of short-term memory.
 - [ ] Add a first version of long-term memory if time allows.
 - [ ] Deploy the `agents` module on AgentCore.
 - [ ] Add LangSmith tracing.
 - [ ] Enable CloudWatch Transaction Search.
 
-**Exit check:** the intent router hands a product question to the product questions component and a refund request to the refunds agent on the deployed agents, each gets a correct reply, and their traces show in LangSmith and CloudWatch.
+**Exit check:** the intent router hands a product question to the product questions component, a refund request to the refunds agent, and an out-of-scope question to the out of scope component on the deployed agents, each gets a correct reply, and their traces show in LangSmith and CloudWatch.
 
 ### Day 6: Evals, guardrails and docs
 
