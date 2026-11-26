@@ -52,6 +52,8 @@ flowchart TD
         InGuard["Amazon Bedrock Guardrails: PII and prompt injection"] --> Router
         Router[Intent router] --> Product
         Router --> Refunds[Refunds]
+        Router --> Other[Fixed out-of-scope reply]
+        Other -->|reply| OutGuard
         subgraph Product[Product questions: candidate approaches]
             P0[v0: RAG workflow]
             P1[v1: Agentic RAG]
@@ -93,15 +95,15 @@ Two agents are fixed: one classifies intent and hands off, and one handles refun
 | --- | --- | --- | --- |
 | Intent router | Detects what the user wants and hands off | None | Intent label + handoff |
 | Product questions (v0 or v1, to be chosen by experiment) | Answers product questions | Product information KB | Grounded answer with sources |
-| Refunds | Checks the order and refund policy, then escalates | Orders service (order details, return policy) | Case summary for a human |
+| Refunds | Answers order status questions. For refund requests, checks the order and refund policy, then escalates | Orders service (order details, return policy) | Order status answer, or case summary for a human |
 
 Agents never call AWS services directly. They go through thin clients (`rag_client`, `orders_client`), which call the MCP server's tools, so the logic is testable with mocks and any KB variant can be swapped in through the `RAG_VARIANT` setting.
 
 The refunds agent does not issue refunds. It gathers the order details, checks eligibility against the policy and hands a case summary to a human for approval.
 
-**Memory:** short-term memory within a conversation is the message list in the graph state, saved between turns with the AgentCore Memory service (see [ADR: Agent graph architecture](adr/agentic_graph.md)). Long-term memory across conversations is not decided yet; it is a first version only if time allows.
+**Memory:** short-term memory within a conversation is the message list in the graph state, saved between turns with the AgentCore Memory service (see [ADR: Agent graph architecture](adr/agent_graph.md)). Long-term memory across conversations is not decided yet; it is a first version only if time allows.
 
-**Models:** each agent runs on its own model. The intent router uses Amazon Nova Lite. The product questions component and the refunds agent use Claude Sonnet 5.5 (see [ADR: Agent graph architecture](adr/agentic_graph.md)).
+**Models:** each agent runs on its own model. The intent router uses Amazon Nova Lite. The product questions component and the refunds agent use Claude Sonnet 5.5 (see [ADR: Agent graph architecture](adr/agent_graph.md)).
 
 ### Product questions: candidate approaches
 
@@ -275,9 +277,10 @@ Changes to this document and the decisions behind them, newest first. Add a row 
 
 | Date | Change | Why / where it was decided |
 | --- | --- | --- |
-| 2026-11-25 | Agents section now records the short-term memory design (graph state, AgentCore Memory checkpointer), and the models per agent (Amazon Nova Lite for the router, Claude Sonnet 5.5 for product questions and refunds). Long-term memory is still open | Decided in [ADR: Agent graph architecture](adr/agentic_graph.md) |
-| 2026-11-25 | The input and output security guardrails are implemented with Amazon Bedrock Guardrails. Added it to the tech stack, the diagram labels, the system description and the Guardrails table | Decided in [ADR: Agent graph architecture](adr/agentic_graph.md) |
-| 2026-11-25 | Moved the input and output guardrails inside the AgentCore subgraph in the diagram, so they are graph nodes. The agent graph design is recorded in the new ADR | Decided in [ADR: Agent graph architecture](adr/agentic_graph.md) |
+| 2026-11-25 | Messages outside product and refunds get a fixed out-of-scope reply (no model call), and the diagram shows that path. Order status questions go to the refunds agent. A message with both a product question and a refund request runs both branches. Off-topic turns stay in memory | Decided in [ADR: Agent graph architecture](adr/agent_graph.md) |
+| 2026-11-25 | Agents section now records the short-term memory design (graph state, AgentCore Memory checkpointer), and the models per agent (Amazon Nova Lite for the router, Claude Sonnet 5.5 for product questions and refunds). Long-term memory is still open | Decided in [ADR: Agent graph architecture](adr/agent_graph.md) |
+| 2026-11-25 | The input and output security guardrails are implemented with Amazon Bedrock Guardrails. Added it to the tech stack, the diagram labels, the system description and the Guardrails table | Decided in [ADR: Agent graph architecture](adr/agent_graph.md) |
+| 2026-11-25 | Moved the input and output guardrails inside the AgentCore subgraph in the diagram, so they are graph nodes. The agent graph design is recorded in the new ADR | Decided in [ADR: Agent graph architecture](adr/agent_graph.md) |
 | 2026-11-25 | Added LangSmith as an agent tracing tool, alongside CloudWatch. Added it to the tech stack, the observability intro and the agents and LLM calls row | LangSmith is in scope for the Day 5 plan (agent tracing, with CloudWatch) |
 | 2026-11-25 | Added two guardrail components to the system diagram: an input guardrail between the web chat UI and the intent router (PII and prompt injection), and an output guardrail between the agents and the web chat UI (response validation). Both agents' replies now pass through the output guardrail before reaching the UI | Added to the diagram as security guardrails, and as rows in the Guardrails table. The Roadmap security item is not yet updated |
 | 2026-11-25 | The MCP server now has two components: product information tools (used by the product questions component, to reach the KB) and orders tools (used by the refunds agent, to reach the orders service). Updated the diagram and the system description to match. Added arrows from the product questions component and the refunds agent back to the web chat UI, so the diagram shows the response to the user | The MCP server needs separate tool groups for product information and orders; the diagram should show where responses go |
