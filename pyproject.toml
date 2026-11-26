@@ -22,4 +22,5 @@ notebook = [
 [tool.uv.workspace]
 members = [
     "services/mcp-server",
+    "services/agents",
 ]

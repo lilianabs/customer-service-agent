@@ -1,0 +1,11 @@
+{
+  "aws": {
+    "region": "us-east-1"
+  },
+  "agents": {
+    "router_model_id": "amazon.nova-micro-v1:0",
+    "router_max_tokens": 200,
+    "router_history_messages": 6,
+    "recursion_limit": 10
+  }
+}

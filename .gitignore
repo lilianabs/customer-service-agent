@@ -16,3 +16,6 @@ notebooks/.ipynb_checkpoints/
 
 # AgentCore deployment config (account-specific ARNs)
 .bedrock_agentcore.yaml
+
+# Docs
+docs/agents_folder_plan.md
