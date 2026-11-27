@@ -74,7 +74,7 @@ Each day ends with an exit check; do not start the next day until it passes, or 
 - [ ] Add a first version of short-term memory.
 - [ ] Add a first version of long-term memory if time allows.
 - [ ] Deploy the `agents` module on AgentCore.
-- [ ] Add LangSmith tracing.
+- [✓] Add LangSmith tracing.
 - [ ] Enable CloudWatch Transaction Search.
 
 **Exit check:** the intent router hands a product question to the product questions component, a refund request to the refunds agent, and an out-of-scope question to the out of scope component on the deployed agents, each gets a correct reply, and their traces show in LangSmith and CloudWatch.
