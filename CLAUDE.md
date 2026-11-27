@@ -176,6 +176,7 @@ Not yet written; due on Day 6 of the implementation plan. Will live in `data/eva
 ## Observability
 
 - **Agent traces**: AgentCore sends to CloudWatch; enable Transaction Search to view them
+- **LangSmith traces**: controlled by the `LANGSMITH_*` vars in `services/agents/.env` (copy from `services/agents/.env.example`); `agent.py` loads that file at startup
 - **RAG latency**: Structured logs tagged with variant; custom CloudWatch metrics
 - **Orders service**: Lambda and API Gateway logs
 

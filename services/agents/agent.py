@@ -22,6 +22,11 @@ Configuration: services/agents/config.json, a copy of the settings this folder
 needs, so the folder can be deployed on its own. The AWS_REGION, MCP_RUNTIME_ARN
 and MCP_URL environment variables override the file.
 
+Environment: services/agents/.env is loaded at startup if it exists (copy
+.env.example to start). Variables already set in the shell win over the file.
+LangSmith tracing uses LANGSMITH_TRACING, LANGSMITH_API_KEY, LANGSMITH_PROJECT
+and LANGSMITH_ENDPOINT. Tracing stays off unless LANGSMITH_TRACING is true.
+
 Product questions use the v0 approach (retrieve, then generate). Retrieval goes
 through rag_client.py, which calls the MCP server's search_product_information
 tool. Set mcp.runtime_arn (written by scripts/create_infra.sh) for the deployed
@@ -38,6 +43,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
+from dotenv import load_dotenv
 from langchain_aws import ChatBedrockConverse
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import Runnable, RunnableConfig
@@ -51,6 +57,10 @@ logger = logging.getLogger("agents")
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 # --- Configuration -----------------------------------------------------------
+
+ENV_PATH = Path(__file__).resolve().parent / ".env"
+# override=False: variables already set in the shell win over the file.
+load_dotenv(ENV_PATH, override=False)
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
 
