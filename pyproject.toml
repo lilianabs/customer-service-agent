@@ -37,3 +37,7 @@ pythonpath = ["services/agents"]
 markers = [
     "live: calls Amazon Bedrock (needs AWS credentials); deselect with -m 'not live'",
 ]
+# Third-party deprecation inside bedrock_agentcore; not from our code.
+filterwarnings = [
+    "ignore:Support for class-based `config` is deprecated:DeprecationWarning:bedrock_agentcore.*",
+]

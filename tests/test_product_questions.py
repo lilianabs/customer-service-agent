@@ -10,7 +10,7 @@ from urllib.parse import unquote
 
 import agent
 import pytest
-from conftest import FAKE_PRODUCT_REPLY
+from conftest import FAKE_PRODUCT_REPLY, FAKE_REFUND_REPLY
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from rag_client import RagClient, RagClientError, agentcore_mcp_url
 
@@ -72,11 +72,11 @@ def test_search_error_gives_fallback(fake_product):
     assert out["pending_intents"] == []
 
 
-def test_product_then_refund_runs_both_branches(fake_product, fake_router):
+def test_product_then_refund_runs_both_branches(fake_product, fake_refunds, fake_router):
     fake_router(["product", "refund"])
     result = agent.run_turn("Is it sulfate-free? Also refund order 1234", f"test-{uuid.uuid4()}")
 
-    assert result["reply"] == f"{FAKE_PRODUCT_REPLY}\n\n[refunds agent not built yet]"
+    assert result["reply"] == f"{FAKE_PRODUCT_REPLY}\n\n{FAKE_REFUND_REPLY}"
     assert result["sources"] == ["argan_shampoo.md", "hair_type_guide.md"]
 
 

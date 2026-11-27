@@ -20,7 +20,8 @@ import functools
 import logging
 import os
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import boto3
 import httpx
@@ -107,7 +108,7 @@ def get_order(order_number: str) -> dict:
     """Get the details of one order, including its line items and purchase date.
 
     Args:
-        order_number: The order number, as the customer gives it (for example "HC-1001").
+        order_number: The order number, as the customer gives it (for example "AC-1001").
 
     Returns:
         The order record from the orders service: line items, purchase date and refund fields.
@@ -137,14 +138,15 @@ def return_policy(order_number: str) -> dict:
 
 @mcp.tool()
 @_logged
-def refund_status(order_number: str) -> str:
+def refund_status(order_number: str) -> dict:
     """Get the refund status of an order (for example "refunded", or no refund yet).
 
     Args:
         order_number: The order number, as the customer gives it.
 
     Returns:
-        The refund status of the order, as a string.
+        A dict with `order_number` and `refund_status` (a string, or null when
+        the order has no refund).
 
     Raises:
         ToolError: If no order has this number.
@@ -154,7 +156,7 @@ def refund_status(order_number: str) -> str:
 
 @mcp.tool()
 @_logged
-def refund_amount(order_number: str) -> float:
+def refund_amount(order_number: str) -> dict:
     """Compute the amount that would be refunded for an order (sum of price times quantity over its items).
 
     This computes the amount only. It does not issue a refund.
@@ -163,7 +165,7 @@ def refund_amount(order_number: str) -> float:
         order_number: The order number, as the customer gives it.
 
     Returns:
-        The refund amount for the order.
+        A dict with `order_number` and `refund_amount` (a number).
 
     Raises:
         ToolError: If no order has this number.

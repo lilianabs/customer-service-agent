@@ -27,7 +27,7 @@ user message
   -> input guardrail (PII, prompt injection)
   -> intent router: returns one or more of product, refund, other
        product -> product questions (v0 or v1, from config)
-       refund  -> refunds agent -> escalation (only for refund requests)
+       refund  -> refunds agent -> escalation (only for eligible refund requests)
        other   -> general node: limited general answer (fixed reply as fallback)
        (both product and refund: run both, in the order they appear in the message)
   -> output guardrail (response validation)
@@ -39,7 +39,8 @@ user message
 - **Product questions:** one node in the graph. The approach (v0 or v1) is selected by config, so either approach runs in the same graph shape against any KB variant. The v1 (agentic RAG) approach loops between the model and retrieval; it is bounded only by `recursion_limit` (see Limits).
 - **Refunds agent:** answers two kinds of request.
   - *Order status questions* ("where is my order?", "has my refund been processed?") are answered from the read-only orders tools (`get_order`, `refund_status`). No escalation.
-  - *Refund requests* also use `return_policy` and `refund_amount`, check eligibility, and write a case summary to the escalation node. The escalation node is terminal in the graph. A human reviews the case outside the graph, so the graph does not pause for approval.
+  - *Refund requests* also use `return_policy` and `refund_amount` and check eligibility. Only eligible requests are escalated: the model calls an `escalate_to_human` tool, which re-checks `return_policy` in code and refuses an ineligible order, so eligibility does not depend on the model. The tool builds a case summary (order number, items, purchase date, refund amount, policy reason, one-sentence request summary; no customer name or email), and the escalation node hands it to a human. For now that means one structured log line (`refund_escalation`, CloudWatch) and the case in the turn's response. A human reviews the case outside the graph, so the graph does not pause for approval. The escalation node is not terminal: a following intent in the same message still runs.
+  - *How it runs:* Claude with the four read-only order tools plus `escalate_to_human`, looping until it answers. The loop runs inside the refunds node on a local message list, so tool calls and tool results stay out of the shared conversation history. It is bounded by `refunds_max_tool_rounds` (config). `apply_refund` is not exposed: `orders_client` has no method for it.
 - **Turn:** each user message is one graph run. The graph ends after the reply. The next message starts a new run at the intent router, with the conversation state restored from the checkpointer.
 
 ### Messages that are neither product nor refund (`other`)

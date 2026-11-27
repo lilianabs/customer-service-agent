@@ -182,7 +182,7 @@ Not yet written; due on Day 6 of the implementation plan. Will live in `data/eva
 
 ## Important Notes
 
-- **Current status (as of Nov 25, 2026)**: Days 1–4 of the plan are done: repo and Terraform setup, orders service deployed, managed KB v0 deployed, and the MCP server for product information and orders. Not yet built: agents (Day 5), golden set and ragas evals plus guardrails (Day 6), system test and web chat UI connection (Day 7), and the RAG `Retriever` interface with v1 and v2 variants (Day 8 onward).
+- **Current status (as of Nov 27, 2026)**: Days 1–4 of the plan are done: repo and Terraform setup, orders service deployed, managed KB v0 deployed, and the MCP server for product information and orders. Day 5 so far: the agent graph in `services/agents/agent.py` (intent router, product questions v0, refunds agent with escalation, general node), with `rag_client`, `orders_client` and the shared `mcp_client`. Not yet built: memory, AgentCore deployment of the agents and CloudWatch Transaction Search (rest of Day 5), golden set and ragas evals plus guardrails (Day 6), system test and web chat UI connection (Day 7), and the RAG `Retriever` interface with v1 and v2 variants (Day 8 onward).
 - **Development is time-boxed**: 7-day plan in [implementation_plan.md](docs/implementation_plan.md) with clear exit checks and a cut line for scope if days slip.
 - **One environment only**: No dev/prod split.
 - **Model routing and the monitoring dashboard are out of scope** for this phase (see Roadmap in architecture.md).

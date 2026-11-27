@@ -68,6 +68,15 @@ check "return_policy calls the orders API" \
   '{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "return_policy", "arguments": {"order_number": "AC-1001"}}}' \
   'eligible.*true'
 
+# The refund tools return dicts; a wrong return annotation fails output validation.
+check "refund_status returns the order's refund status" \
+  '{"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "refund_status", "arguments": {"order_number": "AC-1001"}}}' \
+  'refund_status'
+
+check "refund_amount returns the order's refund amount" \
+  '{"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "refund_amount", "arguments": {"order_number": "AC-1001"}}}' \
+  'refund_amount[^0-9]*30'
+
 # Proves RAG_V0_KB_ID and the runtime role's bedrock:Retrieve permission work.
 check "search_product_information returns passages" \
   '{"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "search_product_information", "arguments": {"query": "how often should I wash my hair", "top_k": 3}}}' \

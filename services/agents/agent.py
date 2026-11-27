@@ -8,10 +8,14 @@ split into the layout in docs/agents_folder_plan.md later.
 Graph (see docs/adr/agent_graph.md):
 
     START -> classify_intent -> next_step -> product_questions | refunds | general | END
-    each branch node -> next_step
+    refunds -> escalation (eligible refund request) | next_step
+    every other branch node, and escalation -> next_step
 
 The router can return several intents. The branches run one after the other, in
 the order the intents appear in the message.
+
+The refunds agent loops between Claude and the read-only orders tools inside its
+node, so tool calls and tool results stay out of the shared message history.
 
 Run locally (serves POST /invocations on port 8080, like AgentCore Runtime):
     uv run python services/agents/agent.py
@@ -45,10 +49,19 @@ from typing import Annotated, Literal
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from dotenv import load_dotenv
 from langchain_aws import ChatBedrockConverse
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from langchain_core.runnables import Runnable, RunnableConfig
+from langchain_core.tools import BaseTool, tool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
+from orders_client import OrdersClient, OrdersClientError
 from pydantic import BaseModel, Field
 from rag_client import Passage, RagClient, RagClientError
 from typing_extensions import TypedDict
@@ -79,6 +92,9 @@ class Settings:
     mcp_url: str  # plain MCP URL, e.g. a local server; wins over the ARN
     general_model_id: str  # limited general answer for `other` messages
     general_max_tokens: int
+    refunds_model_id: str
+    refunds_max_tokens: int
+    refunds_max_tool_rounds: int  # model turns that may call tools, per user message
 
 
 def load_settings(path: Path = CONFIG_PATH) -> Settings:
@@ -102,6 +118,9 @@ def load_settings(path: Path = CONFIG_PATH) -> Settings:
         mcp_url=os.environ.get("MCP_URL") or str(mcp.get("url", "")),
         general_model_id=agents["general_model_id"],
         general_max_tokens=agents["general_max_tokens"],
+        refunds_model_id=agents["refunds_model_id"],
+        refunds_max_tokens=agents["refunds_max_tokens"],
+        refunds_max_tool_rounds=agents["refunds_max_tool_rounds"],
     )
 
 
@@ -178,6 +197,41 @@ that part out: another assistant answers it.
 
 Keep the reply to two or three sentences, in plain text."""
 
+REFUNDS_SYSTEM_PROMPT = """You handle order and refund requests for the customer \
+service assistant of AnyCompany Hair Care, a hair care products company.
+
+You can answer questions about an order (its status, delivery, items, refund status) \
+and take refund requests. Use the tools to read the order. Never guess or invent \
+order details, dates, amounts or policies: use only what the tools return.
+
+- You need an order number (it looks like AC-1001). If the customer hasn't given \
+one in this conversation, ask for it and call no tools.
+- For an order question, use get_order and, if needed, refund_status.
+- For a refund request, call return_policy first.
+  - If the order is eligible, call escalate_to_human with a one-sentence summary of \
+the request. Then tell the customer the order is eligible under our 30-day return \
+policy, the refund amount, and that a member of our team will review the request \
+and decide. Do not say the refund is approved.
+  - If it is not eligible, explain the reason from return_policy. Do not escalate.
+- You cannot approve, deny or issue refunds, and you cannot change orders.
+- If a tool returns an error, such as an unknown order, tell the customer plainly \
+and ask them to check the order number.
+
+Answer only the order or refund part of the customer's latest message. If it also \
+asks a product question or something else, leave that part out: another assistant \
+answers it.
+
+Keep the answer short and friendly. Write plain text only: no Markdown (no bold, \
+headings or bullet lists) and no emoji, because the chat window shows it as is."""
+
+REFUNDS_FALLBACK_REPLY = (
+    "I couldn't check your order right now. Please try again in a moment, or "
+    "contact our customer service team."
+)
+
+# Order fields the refunds model never sees (PII it doesn't need).
+ORDER_PII_FIELDS = ("customer_name", "email")
+
 
 # --- State -------------------------------------------------------------------
 
@@ -186,6 +240,7 @@ class AgentState(TypedDict):
     messages: Annotated[list[AnyMessage], operator.add]  # full history, append mode
     pending_intents: list[str]  # set by the router, consumed by the branches in order
     product_sources: list[str]  # source file names the product answer used this turn
+    escalation: dict | None  # refund case summary for a human, this turn only
 
 
 class RouterDecision(BaseModel):
@@ -330,10 +385,192 @@ def product_questions(state: AgentState) -> dict:
     }
 
 
+_refunds_llm: ChatBedrockConverse | None = None
+_orders: OrdersClient | None = None
+
+
+def _refunds_model() -> ChatBedrockConverse:
+    """Return the refunds model (tools not bound yet), creating it on first use."""
+    global _refunds_llm
+    if _refunds_llm is None:
+        _refunds_llm = ChatBedrockConverse(
+            model=SETTINGS.refunds_model_id,
+            region_name=SETTINGS.region,
+            temperature=0,
+            max_tokens=SETTINGS.refunds_max_tokens,
+        )
+    return _refunds_llm
+
+
+def _orders_client() -> OrdersClient:
+    """Return the orders client, creating it on first use."""
+    global _orders
+    if _orders is None:
+        _orders = OrdersClient(
+            region=SETTINGS.region,
+            runtime_arn=SETTINGS.mcp_runtime_arn,
+            url=SETTINGS.mcp_url,
+        )
+    return _orders
+
+
+def without_pii(order: dict) -> dict:
+    """The order without the customer's name and email."""
+    return {k: v for k, v in order.items() if k not in ORDER_PII_FIELDS}
+
+
+def build_case_summary(
+    orders: OrdersClient, order_number: str, request_summary: str
+) -> tuple[dict | None, str]:
+    """Check eligibility in code and build the case for a human.
+
+    Returns (case, reason): case is None when the order is not eligible.
+    The case holds no customer name or email.
+    """
+    policy = orders.return_policy(order_number)
+    if not policy.get("eligible"):
+        return None, str(policy.get("reason", "Not eligible."))
+    order = orders.get_order(order_number)
+    amount = orders.refund_amount(order_number)
+    case = {
+        "order_number": order_number,
+        "items": order.get("items", []),
+        "purchased": order.get("purchased"),
+        "days_since_purchase": policy.get("days_since_purchase"),
+        "refund_amount": amount.get("refund_amount"),
+        "policy_reason": policy.get("reason"),
+        "request_summary": request_summary,
+    }
+    return case, str(policy.get("reason", ""))
+
+
+def make_refund_tools(orders: OrdersClient, cases: list[dict]) -> list[BaseTool]:
+    """The tools bound to the refunds model. Escalated cases are appended to `cases`.
+
+    Read-only order tools plus escalate_to_human. There is no tool that issues a
+    refund. Errors are returned to the model as text, so it can tell the customer.
+    """
+
+    def guarded(call):
+        try:
+            return json.dumps(call())
+        except OrdersClientError as exc:
+            return f"Error: {exc}"
+
+    @tool
+    def get_order(order_number: str) -> str:
+        """Get an order's details: items, status, purchase date and refund status.
+
+        Args:
+            order_number: The order number the customer gave, for example AC-1001.
+        """
+        return guarded(lambda: without_pii(orders.get_order(order_number)))
+
+    @tool
+    def return_policy(order_number: str) -> str:
+        """Check whether an order is eligible for a refund under the 30-day return policy.
+
+        Args:
+            order_number: The order number the customer gave, for example AC-1001.
+        """
+        return guarded(lambda: orders.return_policy(order_number))
+
+    @tool
+    def refund_status(order_number: str) -> str:
+        """Get an order's refund status (null when no refund has been made).
+
+        Args:
+            order_number: The order number the customer gave, for example AC-1001.
+        """
+        return guarded(lambda: orders.refund_status(order_number))
+
+    @tool
+    def refund_amount(order_number: str) -> str:
+        """Get the amount a refund of the order would be. Does not issue a refund.
+
+        Args:
+            order_number: The order number the customer gave, for example AC-1001.
+        """
+        return guarded(lambda: orders.refund_amount(order_number))
+
+    @tool
+    def escalate_to_human(order_number: str, request_summary: str) -> str:
+        """Send an eligible refund request to a human, who decides the refund.
+
+        Use only after return_policy says the order is eligible. Escalate once per order.
+
+        Args:
+            order_number: The order number, for example AC-1001.
+            request_summary: One sentence describing what the customer asked for and why.
+        """
+        if any(c["order_number"] == order_number for c in cases):
+            return "Already escalated: a member of the team will review the refund."
+        try:
+            case, reason = build_case_summary(orders, order_number, request_summary)
+        except OrdersClientError as exc:
+            return f"Error: {exc}"
+        if case is None:
+            return f"Not escalated: {reason}"
+        cases.append(case)
+        return "Escalated: a member of the team will review the refund and decide."
+
+    return [get_order, return_policy, refund_status, refund_amount, escalate_to_human]
+
+
+def run_tool_call(tools_by_name: dict[str, BaseTool], call: dict) -> ToolMessage:
+    """Run one tool call from the model and wrap the result for the model."""
+    selected = tools_by_name.get(call["name"])
+    if selected is None:
+        content = f"Error: unknown tool {call['name']}"
+    else:
+        content = str(selected.invoke(call["args"]))
+    return ToolMessage(content=content, tool_call_id=call["id"], name=call["name"])
+
+
 def refunds(state: AgentState) -> dict:
-    """Placeholder until the refunds agent is built."""
-    reply = AIMessage("[refunds agent not built yet]")
-    return {"messages": [reply], "pending_intents": state["pending_intents"][1:]}
+    """Refunds agent: Claude with the orders tools, looping until it answers.
+
+    The loop runs on a local message list, so only the final answer joins the
+    conversation history. At most `refunds_max_tool_rounds` model turns run tools.
+    """
+    remaining = state["pending_intents"][1:]
+    cases: list[dict] = []
+    tools = make_refund_tools(_orders_client(), cases)
+    tools_by_name = {t.name: t for t in tools}
+    history = state["messages"][-SETTINGS.router_history_messages :]
+    messages: list[BaseMessage] = [SystemMessage(REFUNDS_SYSTEM_PROMPT), *history]
+
+    reply = ""
+    try:
+        model = _refunds_model().bind_tools(tools)
+        for round_number in range(SETTINGS.refunds_max_tool_rounds + 1):
+            answer = model.invoke(messages)
+            calls = getattr(answer, "tool_calls", None) or []
+            if not calls:
+                reply = answer.text.strip()
+                break
+            if round_number == SETTINGS.refunds_max_tool_rounds:
+                logger.warning("refunds agent hit the tool round limit")
+                break
+            messages.append(answer)
+            messages.extend(run_tool_call(tools_by_name, call) for call in calls)
+    except Exception:
+        logger.exception("refunds agent failed, using the fallback reply")
+
+    return {
+        "messages": [AIMessage(reply or REFUNDS_FALLBACK_REPLY)],
+        "pending_intents": remaining,
+        "escalation": cases[0] if cases else None,
+    }
+
+
+def escalation(state: AgentState) -> dict:
+    """Hand the refund case to a human. For now: one structured log line (CloudWatch).
+
+    A real channel (ticket, queue, email) plugs in here.
+    """
+    logger.info(json.dumps({"event": "refund_escalation", **(state.get("escalation") or {})}))
+    return {}
 
 
 _general_llm: Runnable | None = None
@@ -378,6 +615,13 @@ def next_step(state: AgentState) -> str:
     return INTENT_TO_NODE[pending[0]]
 
 
+def after_refunds(state: AgentState) -> str:
+    """Escalate an eligible refund request, otherwise go on to the next intent."""
+    if state.get("escalation"):
+        return "escalation"
+    return next_step(state)
+
+
 # --- Graph -------------------------------------------------------------------
 
 BRANCHES = ["product_questions", "refunds", "general", END]
@@ -388,11 +632,13 @@ def build_graph(checkpointer=None):
     builder.add_node("classify_intent", classify_intent)
     builder.add_node("product_questions", product_questions)
     builder.add_node("refunds", refunds)
+    builder.add_node("escalation", escalation)
     builder.add_node("general", general)
 
     builder.add_edge(START, "classify_intent")
     builder.add_conditional_edges("classify_intent", next_step, BRANCHES)
-    for node in ("product_questions", "refunds", "general"):
+    builder.add_conditional_edges("refunds", after_refunds, ["escalation", *BRANCHES])
+    for node in ("product_questions", "escalation", "general"):
         builder.add_conditional_edges(node, next_step, BRANCHES)
 
     return builder.compile(checkpointer=checkpointer)
@@ -417,6 +663,7 @@ def run_turn(prompt: str, thread_id: str) -> dict:
         "messages": [HumanMessage(prompt)],
         "pending_intents": [],
         "product_sources": [],  # reset, so sources from an earlier turn don't leak
+        "escalation": None,  # same for an earlier turn's refund case
     }
     result = graph.invoke(inputs, config=run_config)
     new_messages = result["messages"][len(previous) + 1 :]
@@ -424,6 +671,7 @@ def run_turn(prompt: str, thread_id: str) -> dict:
     return {
         "reply": "\n\n".join(str(r) for r in replies),
         "sources": result.get("product_sources", []),
+        "escalation": result.get("escalation"),
         "session_id": thread_id,
     }
 
