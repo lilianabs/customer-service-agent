@@ -80,7 +80,7 @@ def test_product_then_refund_runs_both_branches(fake_product, fake_router):
     assert result["sources"] == ["argan_shampoo.md", "hair_type_guide.md"]
 
 
-def test_sources_reset_on_a_turn_without_product_intent(fake_product, fake_router):
+def test_sources_reset_on_a_turn_without_product_intent(fake_product, fake_general, fake_router):
     thread_id = f"test-{uuid.uuid4()}"
     fake_router(["product"])
     agent.run_turn("Is argan shampoo good for curls?", thread_id)

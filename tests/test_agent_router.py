@@ -12,27 +12,28 @@ Run from the project root:
 
 Needs AWS credentials with Bedrock access in the region from services/agents/config.json.
 
-The product questions node's knowledge base client and model are fakes here, so
-these tests check routing only and don't need the MCP server.
+The product questions node's knowledge base client and model, and the general
+node's model, are fakes here, so these tests check routing only and don't need
+the MCP server.
 """
 
 import uuid
 
 import agent
 import pytest
-from conftest import FAKE_PRODUCT_REPLY
+from conftest import FAKE_GENERAL_REPLY, FAKE_PRODUCT_REPLY
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END
 
 PRODUCT_REPLY = FAKE_PRODUCT_REPLY
 REFUND_REPLY = "[refunds agent not built yet]"
-OTHER_REPLY = agent.OUT_OF_SCOPE_REPLY
+OTHER_REPLY = FAKE_GENERAL_REPLY
 
 
 @pytest.fixture(autouse=True)
-def _stub_product_node(fake_product):
-    """Every test in this file uses the fake product node dependencies."""
-    return fake_product
+def _stub_branch_nodes(fake_product, fake_general):
+    """Every test in this file uses the fake product and general node dependencies."""
+    return fake_product, fake_general
 
 
 def new_thread_id() -> str:
@@ -47,7 +48,7 @@ def new_thread_id() -> str:
     [
         (["product", "refund"], "product_questions"),
         (["refund"], "refunds"),
-        (["other"], "out_of_scope"),
+        (["other"], "general"),
         ([], END),
     ],
 )

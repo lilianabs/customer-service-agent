@@ -28,7 +28,7 @@ user message
   -> intent router: returns one or more of product, refund, other
        product -> product questions (v0 or v1, from config)
        refund  -> refunds agent -> escalation (only for refund requests)
-       other   -> fixed out-of-scope reply
+       other   -> general node: limited general answer (fixed reply as fallback)
        (both product and refund: run both, in the order they appear in the message)
   -> output guardrail (response validation)
   -> reply to the user
@@ -44,10 +44,10 @@ user message
 
 ### Messages that are neither product nor refund (`other`)
 
-The router returns `other` for messages outside the product information and refunds scope. The `other` branch returns a fixed reply, with no model call. The reply says what the assistant can help with (product questions and refund or order requests) and how to reach a human. The exact wording is an open question.
+The router returns `other` for messages outside the product information and refunds scope. The `other` branch is the general node: one model call with no tools and a system prompt that keeps it on scope. It replies briefly to greetings and thanks, gives short general hair care answers without naming products, politely declines anything else, and always says what the assistant can help with (product questions and refund or order requests). It must not state facts about the company (policies, prices, stock, hours, contact details) or claim to take actions. If the model call fails or returns nothing, the node returns a fixed reply instead. The fixed reply's wording is an open question.
 
 - The off-topic exchange stays in the conversation's message history, so follow-up messages have context.
-- The fixed reply is produced by a node in the graph, so it passes through the output guardrail like every other reply.
+- The reply is produced by a node in the graph, so it passes through the output guardrail like every other reply.
 
 Other ways to handle this were considered and not chosen for the first version (see Alternatives considered).
 
@@ -82,17 +82,16 @@ Each graph node uses its own model.
 | Intent router | Amazon Nova Micro | `amazon.nova-micro-v1:0` |
 | Product questions (v0 or v1) | Claude Sonnet 4.6 | `us.anthropic.claude-sonnet-4-6` |
 | Refunds agent | Claude Sonnet 4.6 | `us.anthropic.claude-sonnet-4-6` |
-
-The `other` branch makes no model call.
+| General (`other`) | Amazon Nova Micro | `amazon.nova-micro-v1:0` |
 
 ## Alternatives considered
 
-These options were considered for messages outside the scope. The first was chosen; the others are recorded in case the fixed reply is not enough later.
+These options were considered for messages outside the scope. The first was chosen on 2026-11-25 and replaced by the second on 2026-11-27; the others are recorded in case the general answer is not enough later.
 
 **Off-topic messages**
 
-1. **Fixed out-of-scope reply (chosen).** Cheap, predictable and easy to test. The downside is that it can't answer a general question.
-2. **Limited general answer.** A model call with no tools and a system prompt that keeps it on hair care and the company. It feels friendlier, but it can drift off-topic or make claims about the company that aren't true. It needs its own evaluation cases.
+1. **Fixed out-of-scope reply (first choice, now the fallback).** Cheap, predictable and easy to test. The downside is that it can't answer a general question.
+2. **Limited general answer (chosen 2026-11-27).** A model call with no tools and a system prompt that keeps it on hair care and the company. It feels friendlier, but it can drift off-topic or make claims about the company that aren't true. It needs its own evaluation cases.
 3. **Clarify first.** When the router is unsure, a node asks the user one question ("Are you asking about a product or a refund?") before routing. This also covers ambiguous messages, but it adds a turn and needs a rule for when the router is unsure, such as a confidence threshold. Not chosen for the first version.
 4. **Escalate to a human.** Anything the router can't place goes to the human reviewer. This is the safest for a support team, but it adds load to the reviewer for messages that have nothing to do with refunds.
 
@@ -113,7 +112,7 @@ These options were considered for messages outside the scope. The first was chos
 - One graph shape serves both product questions approaches, so the comparison changes only the approach, not the wiring.
 - Both guardrails sit in the graph, so no path can skip them.
 - The refunds agent is read-only, and the human reviewer stays the only one who approves refunds.
-- Off-topic messages get a fixed reply with no model call, so they cost almost nothing.
+- Off-topic messages get a short, friendly answer from a small, cheap model, with a fixed reply as fallback if the call fails.
 - Order status questions are answered without escalation, which keeps the reviewer's queue for refund requests.
 - The router uses a small, fast model, so the cost of each turn is mostly the answering or refund agent.
 
@@ -124,7 +123,9 @@ These options were considered for messages outside the scope. The first was chos
 - Because the graph does not pause for approval, the refund outcome is not known inside the conversation. The user is told that a human will decide.
 - `recursion_limit` is the only bound on the agentic RAG loop, so one question can use many tokens before it stops. Max tokens per call limits each call, but not the total.
 - The router now has three labels. A message that is misclassified as `other` gets the fixed reply instead of an answer, and the evaluation must check this.
-- Three different models mean three settings to keep in sync with the evaluations.
+- The general answer can drift off-topic or make claims about the company that aren't true, so it needs its own evaluation cases.
+- Off-topic turns now cost one small model call.
+- Several different models mean several settings to keep in sync with the evaluations.
 
 ## Open questions
 

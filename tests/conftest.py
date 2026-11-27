@@ -1,14 +1,20 @@
 """Shared fakes for the agent tests: a fake knowledge base client and chat models."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 import agent
 import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
+from langchain_core.messages import AIMessage, AnyMessage
 from langchain_core.runnables import RunnableLambda
 from rag_client import Passage
 
 FAKE_ANSWER = "Yes, the argan shampoo suits curly hair."
+FAKE_GENERAL_REPLY = (
+    "Hello! I can help with questions about our hair care products, and with orders "
+    "and refunds."
+)
 
 FAKE_PASSAGES: list[Passage] = [
     {"passage": "Argan shampoo is gentle on curls.", "source": "s3://kb/knowledge_base/argan_shampoo.md", "score": 0.9},
@@ -51,6 +57,29 @@ def fake_product(monkeypatch) -> FakeProduct:
     monkeypatch.setattr(agent, "_rag_client", lambda: rag)
     monkeypatch.setattr(agent, "_product_model", lambda: model)
     return FakeProduct(rag=rag, model=model)
+
+
+@dataclass
+class FakeGeneralModel:
+    """Stands in for the general node's model. Records the messages of each call."""
+
+    reply: str = FAKE_GENERAL_REPLY
+    error: Exception | None = None
+    calls: list[list[AnyMessage]] = field(default_factory=list)
+
+    def invoke(self, messages: Sequence[AnyMessage]) -> AIMessage:
+        self.calls.append(list(messages))
+        if self.error is not None:
+            raise self.error
+        return AIMessage(self.reply)
+
+
+@pytest.fixture
+def fake_general(monkeypatch) -> FakeGeneralModel:
+    """Replace the general node's model with a fake."""
+    model = FakeGeneralModel()
+    monkeypatch.setattr(agent, "_general_model", lambda: model)
+    return model
 
 
 @pytest.fixture

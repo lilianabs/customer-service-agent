@@ -68,7 +68,7 @@ Each day ends with an exit check; do not start the next day until it passes, or 
 - [✓] Build the intent router node with tests.
 - [✓] Build the product questions node with tests.
 - [ ] Build the refunds node with tests.
-- [ ] Build the out of scope node with tests.
+- [✓] Build the out of scope node with tests.
 - [✓] Write `rag_client` for the product information KB.
 - [ ] Write `orders_client` for the refunds agent, wire the tools for both, and write the escalation summary for a human.
 - [ ] Add a first version of short-term memory.

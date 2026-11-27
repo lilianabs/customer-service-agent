@@ -7,7 +7,7 @@ split into the layout in docs/agents_folder_plan.md later.
 
 Graph (see docs/adr/agent_graph.md):
 
-    START -> classify_intent -> next_step -> product_questions | refunds | out_of_scope | END
+    START -> classify_intent -> next_step -> product_questions | refunds | general | END
     each branch node -> next_step
 
 The router can return several intents. The branches run one after the other, in
@@ -77,6 +77,8 @@ class Settings:
     product_top_k: int  # passages retrieved per product question
     mcp_runtime_arn: str  # MCP server on AgentCore Runtime (SigV4)
     mcp_url: str  # plain MCP URL, e.g. a local server; wins over the ARN
+    general_model_id: str  # limited general answer for `other` messages
+    general_max_tokens: int
 
 
 def load_settings(path: Path = CONFIG_PATH) -> Settings:
@@ -98,11 +100,14 @@ def load_settings(path: Path = CONFIG_PATH) -> Settings:
         product_top_k=agents["product_top_k"],
         mcp_runtime_arn=os.environ.get("MCP_RUNTIME_ARN") or str(mcp.get("runtime_arn", "")),
         mcp_url=os.environ.get("MCP_URL") or str(mcp.get("url", "")),
+        general_model_id=agents["general_model_id"],
+        general_max_tokens=agents["general_max_tokens"],
     )
 
 
 SETTINGS = load_settings()
 
+# Fallback for the general node when the model call fails or returns nothing.
 # Wording is an open question in the ADR.
 OUT_OF_SCOPE_REPLY = (
     "I can help with questions about our hair care products, and with orders and "
@@ -114,7 +119,7 @@ Intent = Literal["product", "refund", "other"]
 INTENT_TO_NODE: dict[str, str] = {
     "product": "product_questions",
     "refund": "refunds",
-    "other": "out_of_scope",
+    "other": "general",
 }
 
 ROUTER_SYSTEM_PROMPT = """You classify messages sent to the customer service assistant \
@@ -150,6 +155,28 @@ PRODUCT_FALLBACK_REPLY = (
     "I couldn't find that in our product information right now. Please try "
     "rephrasing your question, or contact our customer service team."
 )
+
+GENERAL_SYSTEM_PROMPT = """You are the customer service assistant of AnyCompany Hair \
+Care, a hair care products company. The customer's latest message is not a question \
+about our products or about an order, a return or a refund.
+
+How to reply:
+- Greetings, thanks or small talk: reply briefly and kindly.
+- General hair care questions: give a short, general answer. Do not name, recommend \
+or describe any specific product.
+- Anything else: politely say you can't help with that.
+- Always mention that you can help with questions about our hair care products, and \
+with orders and refunds.
+
+Rules:
+- Never state facts about AnyCompany Hair Care, such as policies, prices, stock, \
+opening hours or contact details. You don't have that information.
+- Never say you have done or will do anything, such as placing an order or issuing \
+a refund.
+- If the message also asks about a product, an order, a return or a refund, leave \
+that part out: another assistant answers it.
+
+Keep the reply to two or three sentences, in plain text."""
 
 
 # --- State -------------------------------------------------------------------
@@ -309,10 +336,33 @@ def refunds(state: AgentState) -> dict:
     return {"messages": [reply], "pending_intents": state["pending_intents"][1:]}
 
 
-def out_of_scope(state: AgentState) -> dict:
-    """Fixed out-of-scope reply. No model call."""
+_general_llm: Runnable | None = None
+
+
+def _general_model() -> Runnable:
+    """Return the general answer model, creating it on first use."""
+    global _general_llm
+    if _general_llm is None:
+        _general_llm = ChatBedrockConverse(
+            model=SETTINGS.general_model_id,
+            region_name=SETTINGS.region,
+            temperature=0,
+            max_tokens=SETTINGS.general_max_tokens,
+        )
+    return _general_llm
+
+
+def general(state: AgentState) -> dict:
+    """Limited general answer for `other` messages; fixed reply if the model fails."""
+    history = state["messages"][-SETTINGS.router_history_messages :]
+    try:
+        answer = _general_model().invoke([SystemMessage(GENERAL_SYSTEM_PROMPT), *history])
+        reply = str(answer.content).strip()
+    except Exception:
+        logger.exception("general answer failed, using the fixed out-of-scope reply")
+        reply = ""
     return {
-        "messages": [AIMessage(OUT_OF_SCOPE_REPLY)],
+        "messages": [AIMessage(reply or OUT_OF_SCOPE_REPLY)],
         "pending_intents": state["pending_intents"][1:],
     }
 
@@ -330,7 +380,7 @@ def next_step(state: AgentState) -> str:
 
 # --- Graph -------------------------------------------------------------------
 
-BRANCHES = ["product_questions", "refunds", "out_of_scope", END]
+BRANCHES = ["product_questions", "refunds", "general", END]
 
 
 def build_graph(checkpointer=None):
@@ -338,11 +388,11 @@ def build_graph(checkpointer=None):
     builder.add_node("classify_intent", classify_intent)
     builder.add_node("product_questions", product_questions)
     builder.add_node("refunds", refunds)
-    builder.add_node("out_of_scope", out_of_scope)
+    builder.add_node("general", general)
 
     builder.add_edge(START, "classify_intent")
     builder.add_conditional_edges("classify_intent", next_step, BRANCHES)
-    for node in ("product_questions", "refunds", "out_of_scope"):
+    for node in ("product_questions", "refunds", "general"):
         builder.add_conditional_edges(node, next_step, BRANCHES)
 
     return builder.compile(checkpointer=checkpointer)

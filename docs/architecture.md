@@ -52,7 +52,7 @@ flowchart TD
         InGuard["Amazon Bedrock Guardrails: PII and prompt injection"] --> Router
         Router[Intent router] --> Product
         Router --> Refunds[Refunds]
-        Router --> Other[Fixed out-of-scope reply]
+        Router --> Other[General: limited answer for off-topic messages]
         Other -->|reply| OutGuard
         subgraph Product[Product questions: candidate approaches]
             P0[v0: RAG workflow]
@@ -277,6 +277,7 @@ Changes to this document and the decisions behind them, newest first. Add a row 
 
 | Date | Change | Why / where it was decided |
 | --- | --- | --- |
+| 2026-11-27 | Messages outside product and refunds now get a limited general answer from the general node (Amazon Nova Micro, no tools, scoped prompt), with the fixed out-of-scope reply as fallback. Updated the diagram | Changed in [ADR: Agent graph architecture](adr/agent_graph.md) (alternative 2) |
 | 2026-11-25 | Messages outside product and refunds get a fixed out-of-scope reply (no model call), and the diagram shows that path. Order status questions go to the refunds agent. A message with both a product question and a refund request runs both branches. Off-topic turns stay in memory | Decided in [ADR: Agent graph architecture](adr/agent_graph.md) |
 | 2026-11-25 | Agents section now records the short-term memory design (graph state, AgentCore Memory checkpointer), and the models per agent (Amazon Nova Lite for the router, Claude Sonnet 5.5 for product questions and refunds). Long-term memory is still open | Decided in [ADR: Agent graph architecture](adr/agent_graph.md) |
 | 2026-11-25 | The input and output security guardrails are implemented with Amazon Bedrock Guardrails. Added it to the tech stack, the diagram labels, the system description and the Guardrails table | Decided in [ADR: Agent graph architecture](adr/agent_graph.md) |
